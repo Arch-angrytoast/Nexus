@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 import json
 import ui_overrides
 import snark_pool
-import tenor_api
+import giphy_api
 import embed_formatter
 
 load_dotenv()
@@ -234,9 +234,9 @@ async def add_action(interaction: discord.Interaction, name: str, search_term: s
     await interaction.response.defer(ephemeral=True)
     action_name_lower = name.lower()
 
-    gifs = await tenor_api.fetch_tenor_gifs(search_term)
+    gifs = await giphy_api.fetch_giphy_gifs(search_term)
     if not gifs:
-        await interaction.followup.send(f"Failed to find any GIFs for the search term '{search_term}'. Is your Tenor API key configured?")
+        await interaction.followup.send(f"Failed to find any GIFs for the search term '{search_term}'. Is your Giphy API key configured?")
         return
 
     try:

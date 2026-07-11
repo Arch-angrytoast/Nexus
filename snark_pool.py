@@ -119,3 +119,16 @@ def calculate_meter(target_id: int, meter_name: str, db_conn=None):
         snark = random.choice(SNARK_POOL["tier_4"])
 
     return score, progress_bar, snark
+
+BOT_IMMUNITY_REPLIES = [
+    "Fuck off, I'm immune to this shit.",
+    "Nice try, but you can't use that on me.",
+    "Do I look like a joke to you? Back off.",
+    "I am Nexus. I am above your petty mortal commands.",
+    "Keep my name out of your commands.",
+    "I'm a bot. What exactly did you think was going to happen?",
+    "Error: Target too powerful. Request denied.",
+    "Don't even try it.",
+    "I measure you. You don't measure me.",
+    "I decline."
+]

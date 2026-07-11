@@ -29,7 +29,7 @@ A highly customizable Discord bot (Nexus) built with `discord.py` and `sqlite3` 
    ```env
    DISCORD_TOKEN=your_discord_bot_token_here
    COMMAND_PREFIX=!
-TENOR_API_KEY=your_tenor_api_key_here
+GIPHY_API_KEY=your_giphy_api_key_here
 OWNER_ID=your_discord_user_id_here
    ```
 4. **Run Nexus:**
