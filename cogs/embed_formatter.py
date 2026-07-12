@@ -1,6 +1,6 @@
 import discord
 import random
-from snark_pool import STUPID_REPLIES
+from .snark_pool import STUPID_REPLIES
 
 def create_meter_embed(
     author: discord.Member | discord.User,

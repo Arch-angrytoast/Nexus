@@ -34,7 +34,7 @@ OWNER_ID=your_discord_user_id_here
    ```
 4. **Run Nexus:**
    ```bash
-   python main.py
+   python bot.py
    ```
 
 Upon running for the first time, Nexus will automatically generate `bot_data.db` and initialize the required tables.
