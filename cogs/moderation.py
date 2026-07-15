@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import datetime
 from . import ui_setup
+from . import ui_confirm
 from . import ui_dossier
 import os
 
@@ -37,14 +38,29 @@ class ModerationCog(commands.Cog):
             await ctx.send("You cannot ban someone with an equal or higher role than you.", ephemeral=True)
             return
 
+        view = ui_confirm.ConfirmView(ctx.author.id)
+        embed = discord.Embed(
+            title="⚠️ Confirm Ban",
+            description=f"Are you sure you want to permanently ban **{member.mention}**?\n**Reason:** {reason}",
+            color=discord.Color.red()
+        )
+        prompt_msg = await ctx.send(embed=embed, view=view, ephemeral=True)
+        await view.wait()
+
+        if not view.value:
+            embed.description = "Ban cancelled."
+            embed.color = discord.Color.green()
+            await prompt_msg.edit(embed=embed, view=None)
+            return
+
         try:
             await member.ban(reason=reason)
             embed = discord.Embed(
-                title="User Banned",
+                title="🔨 User Banned",
                 description=f"**{member.display_name}** has been banned.\n**Reason:** {reason}",
-                color=discord.Color.red()
+                color=discord.Color.dark_red()
             )
-            await ctx.send(embed=embed)
+            await prompt_msg.edit(embed=embed, view=None)
         except discord.Forbidden:
             await ctx.send("I do not have permission to ban this user. Make sure my role is higher than theirs.", ephemeral=True)
 
@@ -68,19 +84,58 @@ class ModerationCog(commands.Cog):
         except discord.Forbidden:
             await ctx.send("I do not have permission to unban users.", ephemeral=True)
 
-    @commands.hybrid_command(name="purge", aliases=["clear"], description="Delete a number of messages in the channel")
-    @app_commands.describe(amount="The number of messages to delete (max 100)")
+    @commands.hybrid_command(name="purge", aliases=["clear"], description="Delete messages in the channel")
+    @app_commands.describe(amount="Number of messages to scan/delete (max 100)", target="Optional: Only delete messages from this user")
     @commands.has_permissions(manage_messages=True)
-    async def purge(self, ctx: commands.Context, amount: int):
+    async def purge(self, ctx: commands.Context, amount: int, target: discord.Member = None):
         if amount < 1 or amount > 100:
             await ctx.send("Please provide a number between 1 and 100.", ephemeral=True)
             return
 
+        # UI Confirmation for large purges to prevent accidents
+        if amount >= 20:
+            view = ui_confirm.ConfirmView(ctx.author.id)
+            target_str = f" from {target.mention}" if target else ""
+            embed = discord.Embed(
+                title="⚠️ Confirm Purge",
+                description=f"Are you sure you want to scan and delete **{amount}** messages{target_str} in this channel?",
+                color=discord.Color.brand_red()
+            )
+            prompt_msg = await ctx.send(embed=embed, view=view, ephemeral=True)
+            await view.wait()
+
+            if not view.value:
+                embed.description = "Purge cancelled."
+                embed.color = discord.Color.green()
+                await prompt_msg.edit(embed=embed, view=None)
+                return
+            else:
+                await prompt_msg.delete()
+
         await ctx.defer(ephemeral=True)
+
+        def check(m):
+            if target:
+                return m.author.id == target.id
+            return True
+
         try:
-            # Add 1 to account for the command message if it was a prefix command
-            deleted = await ctx.channel.purge(limit=amount + 1 if ctx.interaction is None else amount)
-            await ctx.send(f"Successfully deleted {len(deleted)} messages.", delete_after=5, ephemeral=True)
+            # Delete the invocation message first if it was a prefix command
+            if ctx.interaction is None:
+                try:
+                    await ctx.message.delete()
+                except discord.NotFound:
+                    pass
+
+            deleted = await ctx.channel.purge(limit=amount, check=check)
+
+            embed = discord.Embed(
+                title="🗑️ Purge Complete",
+                description=f"Successfully deleted **{len(deleted)}** messages.",
+                color=discord.Color.green()
+            )
+            await ctx.send(embed=embed, delete_after=5, ephemeral=True)
+
         except discord.Forbidden:
             await ctx.send("I do not have permission to manage messages.", ephemeral=True)
         except discord.HTTPException:
@@ -226,9 +281,18 @@ class ModerationCog(commands.Cog):
 
         await ctx.send(embed=embed, view=view, ephemeral=True)
 
-    @commands.hybrid_command(name="setup", description="[ADMIN] Open the interactive Automod setup dashboard")
-    @commands.has_permissions(administrator=True)
+    @commands.hybrid_command(name="setup", description="[OWNER ONLY] Open the interactive Automod & Anti-Nuke dashboard")
     async def setup_dashboard(self, ctx: commands.Context):
+        # Strict Security: Only the Server Owner or Bot Owner can manage the core defense systems.
+        owner_id = str(os.getenv("OWNER_ID"))
+        if str(ctx.author.id) != owner_id and ctx.author.id != ctx.guild.owner_id:
+            embed = discord.Embed(
+                title="⛔ Access Denied",
+                description="For security reasons, only the Server Owner can access the configuration dashboard.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+            return
         def generate_setup_embed():
             cursor = self.bot.db_conn.cursor()
             cursor.execute("SELECT key, value FROM server_config")

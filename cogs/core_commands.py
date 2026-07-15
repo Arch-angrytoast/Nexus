@@ -14,6 +14,7 @@ from . import ui_overrides
 class CoreCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.joke_cooldowns = {} # user_id -> timestamp
 
     async def process_action(self, author: discord.Member | discord.User, target: discord.Member | discord.User, action_name_raw: str, respond_func) -> bool:
         action_name = action_name_raw.lower()
@@ -64,7 +65,7 @@ class CoreCommands(commands.Cog):
         if not row:
             embed = embed_formatter.create_invalid_meter_embed(author)
             await respond_func(content=f"<@{author.id}>", embed=embed)
-            return
+            return False
 
         emoji = row[0]
         score, progress_bar, snark = snark_pool.calculate_meter(target.id, meter_name, self.bot.db_conn)
@@ -78,6 +79,7 @@ class CoreCommands(commands.Cog):
             snark=snark
         )
         await respond_func(content=f"<@{target.id}>", embed=embed)
+        return True
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -136,11 +138,25 @@ class CoreCommands(commands.Cog):
         async def send_response(content, embed):
             await message.channel.send(content=content, embed=embed)
 
-        is_action = await self.process_action(message.author, target, meter_name_raw, send_response)
-        if is_action:
+        # Cooldown check (10 seconds)
+        now = datetime.now(timezone.utc).timestamp()
+        last_used = self.joke_cooldowns.get(message.author.id, 0)
+        if now - last_used < 10:
+            embed = discord.Embed(
+                description=f"⏳ Please wait **{int(10 - (now - last_used))}s** before using another joke command.",
+                color=discord.Color.red()
+            )
+            await message.channel.send(content=f"<@{message.author.id}>", embed=embed, delete_after=3)
             return
 
-        await self.process_meter(message.author, target, meter_name_raw, send_response)
+        is_action = await self.process_action(message.author, target, meter_name_raw, send_response)
+        if is_action:
+            self.joke_cooldowns[message.author.id] = now
+            return
+
+        meter_ran = await self.process_meter(message.author, target, meter_name_raw, send_response)
+        if meter_ran:
+            self.joke_cooldowns[message.author.id] = now
 
         # Make sure we do not block standard commands from firing if any are added later
         # Actually in cogs context the bot handles this, but we'll leave it out since we are using app_commands anyway
@@ -185,12 +201,13 @@ class CoreCommands(commands.Cog):
                 await interaction.response.send_message("No actions have been added yet.", ephemeral=True)
                 return
 
-            description = "\n".join([f"• **{name}**" for (name,) in rows])
             embed = discord.Embed(
                 title="Available Joke Actions",
-                description=description,
+                description="Here are all the roleplay actions you can perform.",
                 color=discord.Color.from_str("#2B2D31")
             )
+            for (name,) in rows:
+                embed.add_field(name=f"• {name.capitalize()}", value=f"`!{name} @user`", inline=True)
             await interaction.response.send_message(embed=embed)
         except Exception as e:
             await interaction.response.send_message(f"Failed to list actions: {e}", ephemeral=True)
@@ -206,12 +223,13 @@ class CoreCommands(commands.Cog):
                 await interaction.response.send_message("No meters have been added yet.", ephemeral=True)
                 return
 
-            description = "\n".join([f"{emoji} **{name}**" for name, emoji in rows])
             embed = discord.Embed(
                 title="Available Joke Meters",
-                description=description,
+                description="Here are all the current joke meters you can measure.",
                 color=discord.Color.from_str("#2B2D31")
             )
+            for name, emoji in rows:
+                embed.add_field(name=f"{emoji} {name.capitalize()}", value=f"`!{name}`", inline=True)
             await interaction.response.send_message(embed=embed)
         except Exception as e:
             await interaction.response.send_message(f"Failed to list meters: {e}", ephemeral=True)

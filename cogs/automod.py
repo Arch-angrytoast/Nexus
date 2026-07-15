@@ -79,7 +79,16 @@ class AutomodCog(commands.Cog):
         # 4. Notify user in channel
         if channel:
             try:
-                await channel.send(f"⚠️ {member.mention}, you have been warned for **{reason}** (+{points} pts). Total: {total_points} pts. Action: {action_taken}", delete_after=10)
+                embed = discord.Embed(
+                    title="⚠️ Warning Issued",
+                    description=f"**{member.mention}**, you violated a server rule.",
+                    color=discord.Color.orange()
+                )
+                embed.add_field(name="Reason", value=reason, inline=True)
+                embed.add_field(name="Points", value=f"+{points}", inline=True)
+                embed.add_field(name="Action Taken", value=action_taken, inline=False)
+                embed.set_footer(text=f"Total Points: {total_points}/100")
+                await channel.send(embed=embed, delete_after=15)
             except Exception:
                 pass
 
