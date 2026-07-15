@@ -74,20 +74,21 @@ class AntiNukeCog(commands.Cog):
                     punishment_taken = "FAILED - Missing Hierarchy/Permissions"
 
         # Action 3: Notify Owner
-        try:
-            owner_user = await self.bot.fetch_user(int(owner_id))
-            embed = discord.Embed(
-                title="🚨 ANTI-NUKE TRIGGERED 🚨",
-                description=f"A severe threat was detected in **{guild.name}**.",
-                color=discord.Color.brand_red(),
-                timestamp=datetime.datetime.now(datetime.timezone.utc)
-            )
-            embed.add_field(name="Rogue User", value=f"{rogue_user.mention} (`{rogue_user.id}`)\n*{rogue_user.name}*", inline=False)
-            embed.add_field(name="Trigger Reason", value=reason, inline=False)
-            embed.add_field(name="Action Taken", value=punishment_taken, inline=False)
-            await owner_user.send(embed=embed)
-        except Exception as e:
-            print(f"Failed to DM owner about Anti-Nuke: {e}")
+        if owner_id and owner_id != "None" and owner_id != "your_discord_user_id_here":
+            try:
+                owner_user = await self.bot.fetch_user(int(owner_id))
+                embed = discord.Embed(
+                    title="🚨 ANTI-NUKE TRIGGERED 🚨",
+                    description=f"A severe threat was detected in **{guild.name}**.",
+                    color=discord.Color.brand_red(),
+                    timestamp=datetime.datetime.now(datetime.timezone.utc)
+                )
+                embed.add_field(name="Rogue User", value=f"{rogue_user.mention} (`{rogue_user.id}`)\n*{rogue_user.name}*", inline=False)
+                embed.add_field(name="Trigger Reason", value=reason, inline=False)
+                embed.add_field(name="Action Taken", value=punishment_taken, inline=False)
+                await owner_user.send(embed=embed)
+            except Exception as e:
+                print(f"Failed to DM owner about Anti-Nuke: {e}")
 
     @commands.Cog.listener()
     async def on_member_ban(self, guild: discord.Guild, user: discord.User | discord.Member):

@@ -63,13 +63,13 @@ class CoreCommands(commands.Cog):
         row = cursor.fetchone()
 
         if not row:
-            embed = embed_formatter.create_invalid_meter_embed(author)
-            await respond_func(content=f"<@{author.id}>", embed=embed)
+            view = embed_formatter.create_invalid_meter_view(author)
+            await respond_func(content=f"<@{author.id}>", view=view)
             return False
 
         emoji = row[0]
         score, progress_bar, snark = snark_pool.calculate_meter(target.id, meter_name, self.bot.db_conn)
-        embed = embed_formatter.create_meter_embed(
+        view = embed_formatter.create_meter_view(
             author=author,
             target_id=target.id,
             meter_name=meter_name,
@@ -78,7 +78,7 @@ class CoreCommands(commands.Cog):
             progress_bar=progress_bar,
             snark=snark
         )
-        await respond_func(content=f"<@{target.id}>", embed=embed)
+        await respond_func(content=f"<@{author.id}>", view=view)
         return True
 
     @commands.Cog.listener()
@@ -291,8 +291,8 @@ class CoreCommands(commands.Cog):
 
         is_action = await self.process_action(interaction.user, target, action_name, respond)
         if not is_action:
-            embed = embed_formatter.create_invalid_meter_embed(interaction.user)
-            await respond(content=f"<@{interaction.user.id}>", embed=embed)
+            view = embed_formatter.create_invalid_meter_view(interaction.user)
+            await respond(content=f"<@{interaction.user.id}>", view=view)
 
     @app_commands.command(name="override-scores", description="[OWNER ONLY] Edit a user's daily meter scores")
     @app_commands.describe(user="The user to edit")
