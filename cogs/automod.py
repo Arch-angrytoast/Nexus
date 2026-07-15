@@ -9,7 +9,6 @@ INVITE_REGEX = re.compile(r'(discord\.gg/|discord\.com/invite/)[a-zA-Z0-9]+', re
 # A simple heuristic for non-english text: Look for non-ASCII alphanumeric characters
 # Not perfect, but a lightweight way to flag heavy usage of other alphabets (Cyrillic, Arabic, CJK, etc)
 NON_ENGLISH_REGEX = re.compile(r'[^\x00-\x7F]+')
-BANNED_WORDS = {'slur1', 'slur2', 'bannedword3'} # Placeholder list
 BOT_PREFIXES = ('!', '?', '-', '/', '.')
 
 class AutomodCog(commands.Cog):
@@ -106,9 +105,13 @@ class AutomodCog(commands.Cog):
             return
 
         # 2. Check Banned Words (Rule 2 filter bypassing)
-        if any(word in content_lower for word in BANNED_WORDS):
-            await self.issue_warning(message, "Using Banned Words", 4)
-            return
+        banned_words_str = self.get_config("banned_words")
+        if banned_words_str:
+            banned_words_list = [w.strip() for w in banned_words_str.split(',') if w.strip()]
+            # use word boundaries or just simple substring depending on preference, here we stick to the basic substring matching
+            if any(word in content_lower for word in banned_words_list):
+                await self.issue_warning(message, "Using Banned Words", 4)
+                return
 
         # 3. Check English-Only (Rule 3)
         # Apply this ONLY in the configured general channel

@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import datetime
+from . import ui_setup
 
 class ModerationCog(commands.Cog):
     def __init__(self, bot):
@@ -208,20 +209,40 @@ class ModerationCog(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="setconfig", description="[ADMIN] Configure specific bot channels")
-    @app_commands.describe(key="The configuration key (e.g. general_channel)", value="The channel ID")
+
+    @commands.hybrid_command(name="setup", description="[ADMIN] Open the interactive Automod setup dashboard")
     @commands.has_permissions(administrator=True)
-    async def setconfig(self, ctx: commands.Context, key: str, value: str):
-        valid_keys = ["general_channel", "spam_channel"]
-        if key not in valid_keys:
-            await ctx.send(f"Invalid key. Valid keys are: {', '.join(valid_keys)}", ephemeral=True)
-            return
+    async def setup_dashboard(self, ctx: commands.Context):
+        def generate_setup_embed():
+            cursor = self.bot.db_conn.cursor()
+            cursor.execute("SELECT key, value FROM server_config")
+            rows = cursor.fetchall()
+            config_dict = {k: v for k, v in rows}
 
-        cursor = self.bot.db_conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (key, value))
-        self.bot.db_conn.commit()
+            gen_ch = config_dict.get("general_channel")
+            gen_str = f"<#{gen_ch}>" if gen_ch else "*Not Set*"
 
-        await ctx.send(f"Successfully set `{key}` to `{value}`.", ephemeral=True)
+            spam_ch = config_dict.get("spam_channel")
+            spam_str = f"<#{spam_ch}>" if spam_ch else "*Not Set*"
+
+            words = config_dict.get("banned_words", "")
+            word_count = len([w for w in words.split(',') if w.strip()]) if words else 0
+
+            embed = discord.Embed(
+                title="⚙️ Automod Setup Dashboard",
+                description="Use the dropdown menu below to configure the Automod settings.",
+                color=discord.Color.blurple()
+            )
+            embed.add_field(name="💬 General Channel", value=f"{gen_str}\n*(Enforces English-only and blocks bot commands)*", inline=False)
+            embed.add_field(name="🗑️ Spam Channel", value=f"{spam_str}\n*(Exempt from spam/velocity rules)*", inline=False)
+            embed.add_field(name="🛑 Banned Words", value=f"**{word_count}** words blacklisted.", inline=False)
+            return embed
+
+        embed = generate_setup_embed()
+        view = ui_setup.SetupView(self.bot.db_conn, generate_setup_embed)
+
+        await ctx.send(embed=embed, view=view, ephemeral=True)
+
 
 async def setup(bot):
     await bot.add_cog(ModerationCog(bot))
