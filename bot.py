@@ -60,7 +60,7 @@ class NexusBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
-        super().__init__(command_prefix=PREFIX, intents=intents)
+        super().__init__(command_prefix=PREFIX, intents=intents, help_command=None)
         self.db_conn = init_db()
 
     async def setup_hook(self):
@@ -68,6 +68,8 @@ class NexusBot(commands.Bot):
         await self.load_extension("cogs.core_commands")
         await self.load_extension("cogs.moderation")
         await self.load_extension("cogs.automod")
+        await self.load_extension("cogs.help")
+        await self.load_extension("cogs.status")
 
         try:
             synced = await self.tree.sync()
