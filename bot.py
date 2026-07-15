@@ -36,6 +36,24 @@ def init_db():
         )
     ''')
     conn.commit()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS warnings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            mod_id INTEGER,
+            reason TEXT,
+            points INTEGER,
+            timestamp TEXT
+        )
+    ''')
+    conn.commit()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS server_config (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
+    conn.commit()
     return conn
 
 class NexusBot(commands.Bot):
@@ -49,6 +67,7 @@ class NexusBot(commands.Bot):
         # Load the core commands cog
         await self.load_extension("cogs.core_commands")
         await self.load_extension("cogs.moderation")
+        await self.load_extension("cogs.automod")
 
         try:
             synced = await self.tree.sync()

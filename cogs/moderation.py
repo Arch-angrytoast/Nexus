@@ -107,5 +107,121 @@ class ModerationCog(commands.Cog):
         except discord.Forbidden:
             await ctx.send("I do not have permission to timeout this user.", ephemeral=True)
 
+
+    @commands.hybrid_command(name="warn", description="Manually issue a warning to a user")
+    @app_commands.describe(member="The member to warn", points="The number of points to assign", reason="The reason for the warning")
+    @commands.has_permissions(manage_messages=True)
+    async def warn(self, ctx: commands.Context, member: discord.Member, points: int, *, reason: str):
+        if points < 1 or points > 100:
+            await ctx.send("Points must be between 1 and 100.", ephemeral=True)
+            return
+
+        utc_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        cursor = self.bot.db_conn.cursor()
+        cursor.execute(
+            "INSERT INTO warnings (user_id, mod_id, reason, points, timestamp) VALUES (?, ?, ?, ?, ?)",
+            (member.id, ctx.author.id, reason, points, utc_now)
+        )
+        self.bot.db_conn.commit()
+
+        thirty_days_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)).isoformat()
+        cursor.execute(
+            "SELECT SUM(points) FROM warnings WHERE user_id = ? AND timestamp > ?",
+            (member.id, thirty_days_ago)
+        )
+        total_points = cursor.fetchone()[0] or 0
+
+        embed = discord.Embed(
+            title="User Warned",
+            description=f"**{member.display_name}** has been warned by **{ctx.author.display_name}**.\n**Reason:** {reason}\n**Points Assigned:** {points}\n**Total Points (30d):** {total_points}",
+            color=discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
+
+        # Note: Manual warnings do not trigger the automod escalations automatically. Mods should handle escalation manually if applying points manually.
+
+    @commands.hybrid_command(name="warnings", description="View a user's warning history")
+    @app_commands.describe(member="The member to view")
+    @commands.has_permissions(manage_messages=True)
+    async def warnings(self, ctx: commands.Context, member: discord.Member):
+        cursor = self.bot.db_conn.cursor()
+        cursor.execute(
+            "SELECT mod_id, reason, points, timestamp FROM warnings WHERE user_id = ? ORDER BY timestamp DESC LIMIT 10",
+            (member.id,)
+        )
+        rows = cursor.fetchall()
+
+        thirty_days_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)).isoformat()
+        cursor.execute(
+            "SELECT SUM(points) FROM warnings WHERE user_id = ? AND timestamp > ?",
+            (member.id, thirty_days_ago)
+        )
+        total_points = cursor.fetchone()[0] or 0
+
+        if not rows:
+            await ctx.send(f"**{member.display_name}** has no warnings on record.", ephemeral=True)
+            return
+
+        description_lines = []
+        for mod_id, reason, points, timestamp in rows:
+            dt = datetime.datetime.fromisoformat(timestamp)
+            formatted_date = dt.strftime("%Y-%m-%d")
+            description_lines.append(f"• **{formatted_date}**: {points} pts - {reason} (by <@{mod_id}>)")
+
+        embed = discord.Embed(
+            title=f"Warning History for {member.display_name}",
+            description="\n".join(description_lines) + f"\n\n**Total Points (last 30 days):** {total_points}",
+            color=discord.Color.dark_theme()
+        )
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_command(name="clearwarnings", description="Clear all warnings for a user")
+    @app_commands.describe(member="The member to clear warnings for")
+    @commands.has_permissions(administrator=True)
+    async def clearwarnings(self, ctx: commands.Context, member: discord.Member):
+        cursor = self.bot.db_conn.cursor()
+        cursor.execute("DELETE FROM warnings WHERE user_id = ?", (member.id,))
+        deleted = cursor.rowcount
+        self.bot.db_conn.commit()
+
+        await ctx.send(f"Cleared {deleted} warnings for **{member.display_name}**.")
+
+    @commands.hybrid_command(name="lockdown", description="Lockdown the current channel, preventing members from sending messages")
+    @commands.has_permissions(manage_channels=True)
+    async def lockdown(self, ctx: commands.Context):
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False, reason=f"Lockdown initiated by {ctx.author.display_name}")
+        embed = discord.Embed(
+            title="🔒 Channel Locked",
+            description="This channel has been locked by a moderator. You can no longer send messages here until it is unlocked.",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_command(name="unlock", description="Unlock the current channel, allowing members to send messages again")
+    @commands.has_permissions(manage_channels=True)
+    async def unlock(self, ctx: commands.Context):
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=None, reason=f"Unlock initiated by {ctx.author.display_name}")
+        embed = discord.Embed(
+            title="🔓 Channel Unlocked",
+            description="This channel has been unlocked. Normal chat permissions have been restored.",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_command(name="setconfig", description="[ADMIN] Configure specific bot channels")
+    @app_commands.describe(key="The configuration key (e.g. general_channel)", value="The channel ID")
+    @commands.has_permissions(administrator=True)
+    async def setconfig(self, ctx: commands.Context, key: str, value: str):
+        valid_keys = ["general_channel", "spam_channel"]
+        if key not in valid_keys:
+            await ctx.send(f"Invalid key. Valid keys are: {', '.join(valid_keys)}", ephemeral=True)
+            return
+
+        cursor = self.bot.db_conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (key, value))
+        self.bot.db_conn.commit()
+
+        await ctx.send(f"Successfully set `{key}` to `{value}`.", ephemeral=True)
+
 async def setup(bot):
     await bot.add_cog(ModerationCog(bot))
