@@ -96,8 +96,14 @@ class CoreCommands(commands.Cog):
         if not content_without_prefix:
             return
 
+
         parts = content_without_prefix.split()
         meter_name_raw = parts[0]
+
+        # Prevent the catch-all listener from attacking users who are just trying to use valid commands
+        if self.bot.get_command(meter_name_raw):
+            return
+
 
         target = None
 

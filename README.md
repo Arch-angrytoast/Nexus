@@ -14,6 +14,7 @@ A highly customizable Discord bot (Nexus) built with `discord.py` and `sqlite3` 
 ## Prerequisites
 
 - Python 3.10+
+- **FFmpeg** installed and added to your system PATH (required for music playback).
 - A Discord Bot Token (created from the [Discord Developer Portal](https://discord.com/developers/applications)).
 - Nexus must have **Message Content Intent** enabled in the Developer Portal.
 
