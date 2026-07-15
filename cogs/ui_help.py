@@ -45,13 +45,9 @@ class HelpDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         if self.values[0] == "home":
-            embed = discord.Embed(
-                title="Nexus Help Menu",
-                description="Welcome to the Nexus help menu! Please select a category from the dropdown below to see the available commands.",
-                color=discord.Color.blurple()
-            )
-            embed.set_thumbnail(url=self.bot.user.display_avatar.url if self.bot.user.display_avatar else None)
-            await interaction.response.edit_message(embed=embed)
+            from . import box_formatter
+            box = box_formatter.create_box("Nexus Help Menu", "Welcome to the Nexus help menu! Please select a category from the dropdown below to see the available commands.")
+            await interaction.response.edit_message(content=box, embed=None)
             return
 
         selected_cog_name = self.values[0]
@@ -69,11 +65,8 @@ class HelpDropdown(discord.ui.Select):
             await interaction.response.send_message("Could not load commands for this category.", ephemeral=True)
             return
 
-        embed = discord.Embed(
-            title=f"{selected_cog_name} Commands",
-            description=getattr(target_cog, 'description', ""),
-            color=discord.Color.blue()
-        )
+        from . import box_formatter
+        content = f"*{getattr(target_cog, 'description', '')}*\n\n"
 
         prefix = self.bot.command_prefix
         if isinstance(prefix, (list, tuple)):
@@ -91,11 +84,10 @@ class HelpDropdown(discord.ui.Select):
 
             command_usage = f"`{prefix}{cmd.name} {signature}`".strip()
             command_desc = cmd.description or cmd.short_doc or "No description provided."
+            content += f"**{command_usage}**\n{command_desc}\n\n"
 
-            embed.add_field(name=command_usage, value=command_desc, inline=False)
-
-        embed.set_footer(text="Parameters wrapped in <> are required, [] are optional.")
-        await interaction.response.edit_message(embed=embed)
+        box = box_formatter.create_box(f"{selected_cog_name} Commands", content.strip(), footer_text="Parameters wrapped in <> are required, [] are optional.")
+        await interaction.response.edit_message(content=box, embed=None)
 
 
 class HelpView(discord.ui.View):

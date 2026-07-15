@@ -6,7 +6,7 @@ import random
 import os
 from datetime import datetime, timezone
 
-from . import embed_formatter
+from . import box_formatter
 from . import snark_pool
 from . import giphy_api
 from . import ui_overrides
@@ -27,35 +27,27 @@ class CoreCommands(commands.Cog):
 
         # Bot immunity Check
         if target.id == self.bot.user.id:
-            embed = discord.Embed(
-                description=random.choice(snark_pool.BOT_IMMUNITY_REPLIES),
-                color=discord.Color.from_str("#2B2D31")
-            )
-            await respond_func(content=f"<@{author.id}>", embed=embed)
+            box = box_formatter.create_box("🛡️ Immunity", random.choice(snark_pool.BOT_IMMUNITY_REPLIES), used_by=author)
+            await respond_func(content=f"<@{author.id}>\n\n{box}")
             return True
 
         gifs = json.loads(row[0])
         selected_gif = random.choice(gifs) if gifs else None
 
-        embed = discord.Embed(
-            description=f"**<@{author.id}>** {action_name}s **<@{target.id}>**!",
-            color=discord.Color.from_str("#2B2D31")
-        )
+        box_content = f"**<@{author.id}>** {action_name}s **<@{target.id}>**!"
         if selected_gif:
-            embed.set_image(url=selected_gif)
+            box_content += f"\n\n{selected_gif}"
 
-        await respond_func(content=f"<@{target.id}>", embed=embed)
+        box = box_formatter.create_box("🎬 Action", box_content, used_by=author)
+        await respond_func(content=f"<@{target.id}>\n\n{box}")
         return True
 
     async def process_meter(self, author: discord.Member | discord.User, target: discord.Member | discord.User, meter_name_raw: str, respond_func):
         meter_name = meter_name_raw.lower()
 
         if target.id == self.bot.user.id:
-            embed = discord.Embed(
-                description=random.choice(snark_pool.BOT_IMMUNITY_REPLIES),
-                color=discord.Color.from_str("#2B2D31")
-            )
-            await respond_func(content=f"<@{author.id}>", embed=embed)
+            box = box_formatter.create_box("🛡️ Immunity", random.choice(snark_pool.BOT_IMMUNITY_REPLIES), used_by=author)
+            await respond_func(content=f"<@{author.id}>\n\n{box}")
             return
 
         cursor = self.bot.db_conn.cursor()
@@ -63,13 +55,13 @@ class CoreCommands(commands.Cog):
         row = cursor.fetchone()
 
         if not row:
-            view = embed_formatter.create_invalid_meter_view(author)
-            await respond_func(content=f"<@{author.id}>", view=view)
+            box = box_formatter.create_invalid_meter_box(author)
+            await respond_func(content=f"<@{author.id}>\n\n{box}")
             return False
 
         emoji = row[0]
         score, progress_bar, snark = snark_pool.calculate_meter(target.id, meter_name, self.bot.db_conn)
-        view = embed_formatter.create_meter_view(
+        box = box_formatter.create_meter_box(
             author=author,
             target_id=target.id,
             meter_name=meter_name,
@@ -78,7 +70,7 @@ class CoreCommands(commands.Cog):
             progress_bar=progress_bar,
             snark=snark
         )
-        await respond_func(content=f"<@{author.id}>", view=view)
+        await respond_func(content=f"<@{author.id}>\n\n{box}")
         return True
 
     @commands.Cog.listener()
@@ -135,18 +127,15 @@ class CoreCommands(commands.Cog):
         if target is None:
             target = message.author
 
-        async def send_response(content, embed):
-            await message.channel.send(content=content, embed=embed)
+        async def send_response(content):
+            await message.channel.send(content=content)
 
         # Cooldown check (10 seconds)
         now = datetime.now(timezone.utc).timestamp()
         last_used = self.joke_cooldowns.get(message.author.id, 0)
         if now - last_used < 10:
-            embed = discord.Embed(
-                description=f"⏳ Please wait **{int(10 - (now - last_used))}s** before using another joke command.",
-                color=discord.Color.red()
-            )
-            await message.channel.send(content=f"<@{message.author.id}>", embed=embed, delete_after=3)
+            box = box_formatter.create_box("⏳ Cooldown", f"Please wait **{int(10 - (now - last_used))}s** before using another joke command.")
+            await message.channel.send(content=f"<@{message.author.id}>\n\n{box}", delete_after=3)
             return
 
         is_action = await self.process_action(message.author, target, meter_name_raw, send_response)
@@ -201,14 +190,11 @@ class CoreCommands(commands.Cog):
                 await interaction.response.send_message("No actions have been added yet.", ephemeral=True)
                 return
 
-            embed = discord.Embed(
-                title="Available Joke Actions",
-                description="Here are all the roleplay actions you can perform.",
-                color=discord.Color.from_str("#2B2D31")
-            )
+            content = "Here are all the roleplay actions you can perform.\n\n"
             for (name,) in rows:
-                embed.add_field(name=f"• {name.capitalize()}", value=f"`!{name} @user`", inline=True)
-            await interaction.response.send_message(embed=embed)
+                content += f"• **{name.capitalize()}** (`!{name} @user`)\n"
+            box = box_formatter.create_box("🎭 Available Joke Actions", content)
+            await interaction.response.send_message(content=box)
         except Exception as e:
             await interaction.response.send_message(f"Failed to list actions: {e}", ephemeral=True)
 
@@ -223,14 +209,11 @@ class CoreCommands(commands.Cog):
                 await interaction.response.send_message("No meters have been added yet.", ephemeral=True)
                 return
 
-            embed = discord.Embed(
-                title="Available Joke Meters",
-                description="Here are all the current joke meters you can measure.",
-                color=discord.Color.from_str("#2B2D31")
-            )
+            content = "Here are all the meters you can measure people with.\n\n"
             for name, emoji in rows:
-                embed.add_field(name=f"{emoji} {name.capitalize()}", value=f"`!{name}`", inline=True)
-            await interaction.response.send_message(embed=embed)
+                content += f"• {emoji} **{name.capitalize()}** (`!{name}`)\n"
+            box = box_formatter.create_box("📏 Available Joke Meters", content)
+            await interaction.response.send_message(content=box)
         except Exception as e:
             await interaction.response.send_message(f"Failed to list meters: {e}", ephemeral=True)
 
@@ -276,8 +259,8 @@ class CoreCommands(commands.Cog):
     async def measure(self, interaction: discord.Interaction, meter_name: str, user: discord.Member = None):
         target = user if user else interaction.user
 
-        async def respond(content, embed):
-            await interaction.response.send_message(content=content, embed=embed)
+        async def respond(content):
+            await interaction.response.send_message(content=content)
 
         await self.process_meter(interaction.user, target, meter_name, respond)
 
@@ -286,13 +269,13 @@ class CoreCommands(commands.Cog):
     async def perform(self, interaction: discord.Interaction, action_name: str, user: discord.Member = None):
         target = user if user else interaction.user
 
-        async def respond(content, embed):
-            await interaction.response.send_message(content=content, embed=embed)
+        async def respond(content):
+            await interaction.response.send_message(content=content)
 
         is_action = await self.process_action(interaction.user, target, action_name, respond)
         if not is_action:
-            view = embed_formatter.create_invalid_meter_view(interaction.user)
-            await respond(content=f"<@{interaction.user.id}>", view=view)
+            box = box_formatter.create_invalid_meter_box(interaction.user)
+            await respond(content=f"<@{interaction.user.id}>\n\n{box}")
 
     @app_commands.command(name="override-scores", description="[OWNER ONLY] Edit a user's daily meter scores")
     @app_commands.describe(user="The user to edit")
@@ -323,16 +306,12 @@ class CoreCommands(commands.Cog):
                 is_overridden = " *(Edited)*" if override else ""
                 description_lines.append(f"{emoji} **{name.capitalize()}**: {score}%{is_overridden}")
 
-            embed = discord.Embed(
-                title=f"Score Overrides for {user.display_name}",
-                description="\n".join(description_lines),
-                color=discord.Color.from_str("#2B2D31")
-            )
-            return embed
+            content = "\n".join(description_lines)
+            return box_formatter.create_box(f"Score Overrides for {user.display_name}", content)
 
         view = ui_overrides.OverrideView(self.bot.db_conn, user, meter_names, generate_embed)
-        embed = generate_embed()
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        box = generate_embed()
+        await interaction.response.send_message(content=box, view=view, ephemeral=True)
 
 
 async def setup(bot):

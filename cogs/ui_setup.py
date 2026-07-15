@@ -123,9 +123,9 @@ class FilterToggleView(discord.ui.View):
             btn.style = discord.ButtonStyle.success if new_val == "1" else discord.ButtonStyle.danger
 
             # Also refresh the main embed
-            embed = self.parent_view.generate_embed_func()
+            box = self.parent_view.generate_embed_func()
             try:
-                await interaction.edit_original_response(embed=embed, view=self)
+                await interaction.edit_original_response(content=box, embed=None, view=self)
             except discord.NotFound:
                 pass
 
@@ -213,12 +213,12 @@ class SetupView(discord.ui.View):
         self.add_item(MainSetupDropdown(self))
 
     async def refresh_embed(self, interaction: discord.Interaction):
-        embed = self.generate_embed_func()
+        box = self.generate_embed_func()
         # Reset to main dropdown
         self.clear_items()
         self.add_item(MainSetupDropdown(self))
 
         try:
-            await interaction.edit_original_response(embed=embed, view=self)
+            await interaction.edit_original_response(content=box, embed=None, view=self)
         except Exception:
             pass
