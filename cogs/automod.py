@@ -99,52 +99,50 @@ class AutomodCog(commands.Cog):
         is_general = str(message.channel.id) == str(general_channel_id)
         is_spam = str(message.channel.id) == str(spam_channel_id)
 
+        def is_enabled(key: str) -> bool:
+            val = self.get_config(key)
+            return val is None or val == "1" # Default to True
+
         # 1. Check Invites (Rule 3)
-        if INVITE_REGEX.search(content_lower):
+        if is_enabled("filter_links") and INVITE_REGEX.search(content_lower):
             await self.issue_warning(message, "Posting Unauthorized Invites", 3)
             return
 
         # 2. Check Banned Words (Rule 2 filter bypassing)
-        banned_words_str = self.get_config("banned_words")
-        if banned_words_str:
-            banned_words_list = [w.strip() for w in banned_words_str.split(',') if w.strip()]
-            # use word boundaries or just simple substring depending on preference, here we stick to the basic substring matching
-            if any(word in content_lower for word in banned_words_list):
-                await self.issue_warning(message, "Using Banned Words", 4)
-                return
+        if is_enabled("filter_words"):
+            banned_words_str = self.get_config("banned_words")
+            if banned_words_str:
+                banned_words_list = [w.strip() for w in banned_words_str.split(',') if w.strip()]
+                if any(word in content_lower for word in banned_words_list):
+                    await self.issue_warning(message, "Using Banned Words", 4)
+                    return
 
         # 3. Check English-Only (Rule 3)
-        # Apply this ONLY in the configured general channel
-        if is_general:
-            # Strip emojis, mentions, and basic punctuation to accurately weigh non-english text
+        if is_enabled("filter_english") and is_general:
             clean_content = re.sub(r'<:[a-zA-Z0-9_]+:[0-9]+>|<@!?[0-9]+>|<#[0-9]+>|[\s\.,!\?\'\"]', '', message.content)
             if clean_content:
                 non_english_chars = NON_ENGLISH_REGEX.findall(clean_content)
                 non_english_count = sum(len(match) for match in non_english_chars)
-                # If more than 30% of the message characters are non-ASCII, flag it
                 if (non_english_count / len(clean_content)) > 0.3:
                     await self.issue_warning(message, "Non-English text in general channel", 1)
                     return
 
-            # 4. Bot Command Enforcement (Rule 4)
-            # Apply ONLY in general channel
+        # 4. Bot Command Enforcement (Rule 4)
+        if is_enabled("filter_commands") and is_general:
             if message.content.startswith(BOT_PREFIXES):
                 await self.issue_warning(message, "Using bot commands in general channel", 1)
                 return
 
         # 5. Spam Control (Rule 3)
-        # Apply everywhere EXCEPT the designated spam channel
-        if not is_spam:
+        if is_enabled("filter_spam") and not is_spam:
             now = datetime.datetime.now().timestamp()
             timestamps = self.spam_tracker[message.author.id]
-            # Keep only timestamps from the last 5 seconds
             timestamps = [t for t in timestamps if now - t < 5]
             timestamps.append(now)
             self.spam_tracker[message.author.id] = timestamps
 
-            # If they sent 5 messages in 5 seconds
             if len(timestamps) >= 5:
-                self.spam_tracker[message.author.id] = [] # Reset to prevent double warning
+                self.spam_tracker[message.author.id] = []
                 await self.issue_warning(message, "Spamming messages", 2)
                 return
 

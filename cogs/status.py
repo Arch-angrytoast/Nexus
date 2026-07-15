@@ -2,17 +2,13 @@ import discord
 from discord.ext import commands, tasks
 import itertools
 
+import os
+import itertools
+
 class StatusCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-        # A list of statuses to rotate through
-        self.statuses = itertools.cycle([
-            discord.Game(name="with Joke Meters 🃏"),
-            discord.Activity(type=discord.ActivityType.watching, name="over the server 🛡️"),
-            discord.Activity(type=discord.ActivityType.listening, name="to !help 📜"),
-            discord.Game(name="enforcing the rules ⚖️")
-        ])
+        self.status_index = 0
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -25,10 +21,40 @@ class StatusCog(commands.Cog):
     @tasks.loop(seconds=15.0)
     async def rotate_status(self):
         try:
-            status_obj = next(self.statuses)
-            await self.bot.change_presence(activity=status_obj)
-        except Exception:
-            pass
+            if not os.path.exists("statuses.txt"):
+                return
+
+            with open("statuses.txt", "r") as f:
+                lines = [line.strip() for line in f.readlines() if line.strip()]
+
+            if not lines:
+                return
+
+            if self.status_index >= len(lines):
+                self.status_index = 0
+
+            current_status = lines[self.status_index]
+            self.status_index += 1
+
+            activity_type = discord.ActivityType.playing
+            name = current_status
+
+            if "|" in current_status:
+                parts = current_status.split("|", 1)
+                t_str = parts[0].strip().lower()
+                name = parts[1].strip()
+
+                if t_str == "watching":
+                    activity_type = discord.ActivityType.watching
+                elif t_str == "listening":
+                    activity_type = discord.ActivityType.listening
+                elif t_str == "competing":
+                    activity_type = discord.ActivityType.competing
+
+            activity = discord.Activity(type=activity_type, name=name)
+            await self.bot.change_presence(status=discord.Status.dnd, activity=activity)
+        except Exception as e:
+            print(f"Status rotation error: {e}")
 
     @rotate_status.before_loop
     async def before_rotate(self):

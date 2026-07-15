@@ -228,11 +228,20 @@ class ModerationCog(commands.Cog):
             words = config_dict.get("banned_words", "")
             word_count = len([w for w in words.split(',') if w.strip()]) if words else 0
 
+            def is_enabled(key: str) -> str:
+                val = config_dict.get(key)
+                return "🟢 ON" if val is None or val == "1" else "🔴 OFF"
+
             embed = discord.Embed(
                 title="⚙️ Automod Setup Dashboard",
                 description="Use the dropdown menu below to configure the Automod settings.",
                 color=discord.Color.blurple()
             )
+
+            # Status overview
+            toggles_str = f"**Links:** {is_enabled('filter_links')} | **Words:** {is_enabled('filter_words')} | **English:** {is_enabled('filter_english')} | **Commands:** {is_enabled('filter_commands')} | **Spam:** {is_enabled('filter_spam')}"
+            embed.add_field(name="🎛️ Filter Status", value=toggles_str, inline=False)
+
             embed.add_field(name="💬 General Channel", value=f"{gen_str}\n*(Enforces English-only and blocks bot commands)*", inline=False)
             embed.add_field(name="🗑️ Spam Channel", value=f"{spam_str}\n*(Exempt from spam/velocity rules)*", inline=False)
             embed.add_field(name="🛑 Banned Words", value=f"**{word_count}** words blacklisted.", inline=False)

@@ -25,6 +25,61 @@ class BannedWordsModal(discord.ui.Modal, title='Manage Banned Words'):
         await interaction.response.defer()
         await self.view_to_refresh.refresh_embed(interaction)
 
+
+class FilterToggleView(discord.ui.View):
+    def __init__(self, db_conn: sqlite3.Connection, parent_view):
+        super().__init__(timeout=600)
+        self.db_conn = db_conn
+        self.parent_view = parent_view
+
+        self.filters = {
+            "filter_links": "🔗 Link/Invite Filter",
+            "filter_words": "🤬 Banned Words",
+            "filter_english": "🗣️ English-Only",
+            "filter_commands": "🤖 Bot Commands",
+            "filter_spam": "🗑️ Spam/Velocity"
+        }
+
+        for key, label in self.filters.items():
+            self.add_item(self.create_button(key, label))
+
+        # Back Button
+        back_btn = discord.ui.Button(label="Back to Menu", style=discord.ButtonStyle.secondary, row=2)
+        async def back_callback(interaction: discord.Interaction):
+            self.parent_view.clear_items()
+            self.parent_view.add_item(MainSetupDropdown(self.parent_view))
+            await interaction.response.edit_message(view=self.parent_view)
+        back_btn.callback = back_callback
+        self.add_item(back_btn)
+
+    def is_enabled(self, key: str) -> bool:
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT value FROM server_config WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row[0] == "1" if row else True
+
+    def create_button(self, key: str, label: str):
+        enabled = self.is_enabled(key)
+        style = discord.ButtonStyle.success if enabled else discord.ButtonStyle.danger
+
+        btn = discord.ui.Button(label=label, style=style)
+
+        async def btn_callback(interaction: discord.Interaction):
+            new_val = "0" if self.is_enabled(key) else "1"
+            cursor = self.db_conn.cursor()
+            cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (key, new_val))
+            self.db_conn.commit()
+
+            # Refresh the buttons
+            btn.style = discord.ButtonStyle.success if new_val == "1" else discord.ButtonStyle.danger
+
+            # Also refresh the main embed
+            embed = self.parent_view.generate_embed_func()
+            await interaction.response.edit_message(embed=embed, view=self)
+
+        btn.callback = btn_callback
+        return btn
+
 class ChannelAssignSelect(discord.ui.ChannelSelect):
     def __init__(self, db_conn: sqlite3.Connection, config_key: str, view_to_refresh):
         self.db_conn = db_conn
@@ -58,7 +113,8 @@ class MainSetupDropdown(discord.ui.Select):
         options = [
             discord.SelectOption(label="Set General Channel", description="Select the channel for English-only rules", emoji="💬", value="general_channel"),
             discord.SelectOption(label="Set Spam Channel", description="Select the channel exempt from spam rules", emoji="🗑️", value="spam_channel"),
-            discord.SelectOption(label="Manage Banned Words", description="Edit the server's profanity blacklist", emoji="🛑", value="banned_words")
+            discord.SelectOption(label="Manage Banned Words", description="Edit the server's profanity blacklist", emoji="🛑", value="banned_words"),
+            discord.SelectOption(label="Toggle Automod Filters", description="Turn specific automod filters ON or OFF", emoji="⚙️", value="toggles")
         ]
         super().__init__(placeholder="Choose an automod setting to configure...", min_values=1, max_values=1, options=options)
 
@@ -74,6 +130,13 @@ class MainSetupDropdown(discord.ui.Select):
             modal = BannedWordsModal(self.parent_view.db_conn, current_words, self.parent_view)
             await interaction.response.send_modal(modal)
             # We don't edit the message here, the modal submission will trigger a refresh
+        elif selection == "toggles":
+            self.parent_view.clear_items()
+            # We copy all items from FilterToggleView into the parent_view, or just use the parent view
+            toggle_view = FilterToggleView(self.parent_view.db_conn, self.parent_view)
+            for item in toggle_view.children:
+                self.parent_view.add_item(item)
+            await interaction.response.edit_message(view=self.parent_view)
         else:
             # Swap out the main dropdown for the channel select
             self.parent_view.clear_items()
