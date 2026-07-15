@@ -48,7 +48,8 @@ class NexusBot(commands.Bot):
     async def setup_hook(self):
         # Load the core commands cog
         await self.load_extension("cogs.core_commands")
-        await self.load_extension("cogs.music")
+        await self.load_extension("cogs.moderation")
+
         try:
             synced = await self.tree.sync()
             print(f"Synced {len(synced)} slash commands.")
