@@ -60,6 +60,8 @@ class NexusBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.members = True
+        intents.presences = True
         super().__init__(command_prefix=PREFIX, intents=intents, help_command=None)
         self.db_conn = init_db()
 

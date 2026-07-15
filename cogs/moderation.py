@@ -3,6 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 import datetime
 from . import ui_setup
+from . import ui_dossier
+import os
 
 class ModerationCog(commands.Cog):
     def __init__(self, bot):
@@ -209,6 +211,20 @@ class ModerationCog(commands.Cog):
         )
         await ctx.send(embed=embed)
 
+
+
+    @commands.hybrid_command(name="dossier", description="[OWNER ONLY] Pull a classified dossier on a user")
+    @app_commands.describe(member="The member to investigate")
+    async def dossier(self, ctx: commands.Context, member: discord.Member):
+        owner_id = os.getenv("OWNER_ID")
+        if str(ctx.author.id) != str(owner_id):
+            await ctx.send("CLASSIFIED: You do not have the required clearance to use this command.", ephemeral=True)
+            return
+
+        view = ui_dossier.DossierView(member, self.bot.db_conn)
+        embed = view.generate_identity_embed()
+
+        await ctx.send(embed=embed, view=view, ephemeral=True)
 
     @commands.hybrid_command(name="setup", description="[ADMIN] Open the interactive Automod setup dashboard")
     @commands.has_permissions(administrator=True)
