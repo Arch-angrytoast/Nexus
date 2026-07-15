@@ -150,83 +150,84 @@ class CoreCommands(commands.Cog):
         # Make sure we do not block standard commands from firing if any are added later
         # Actually in cogs context the bot handles this, but we'll leave it out since we are using app_commands anyway
 
-    @app_commands.command(name="add-meter", description="Add a new joke meter")
+    @commands.hybrid_command(name="add-meter", description="Add a new joke meter")
     @app_commands.describe(name="The trigger word for the meter", emoji="The emoji icon for the meter")
-    @app_commands.default_permissions(administrator=True)
-    async def add_meter(self, interaction: discord.Interaction, name: str, emoji: str):
+    @commands.has_permissions(administrator=True)
+    async def add_meter(self, ctx: commands.Context, name: str, emoji: str):
         meter_name_lower = name.lower()
         try:
             cursor = self.bot.db_conn.cursor()
             cursor.execute("INSERT OR REPLACE INTO joke_meters (meter_name, emoji) VALUES (?, ?)", (meter_name_lower, emoji))
             self.bot.db_conn.commit()
-            await interaction.response.send_message(f"Successfully added/updated meter `{meter_name_lower}` with emoji {emoji}", ephemeral=True)
+            await ctx.send(f"Successfully added/updated meter `{meter_name_lower}` with emoji {emoji}", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Failed to add meter: {e}", ephemeral=True)
+            await ctx.send(f"Failed to add meter: {e}", ephemeral=True)
 
-    @app_commands.command(name="remove-meter", description="Remove a joke meter")
+    @commands.hybrid_command(name="remove-meter", description="Remove a joke meter")
     @app_commands.describe(name="The trigger word of the meter to remove")
-    @app_commands.default_permissions(administrator=True)
-    async def remove_meter(self, interaction: discord.Interaction, name: str):
+    @commands.has_permissions(administrator=True)
+    async def remove_meter(self, ctx: commands.Context, name: str):
         meter_name_lower = name.lower()
         try:
             cursor = self.bot.db_conn.cursor()
             cursor.execute("DELETE FROM joke_meters WHERE meter_name = ?", (meter_name_lower,))
             if cursor.rowcount > 0:
                 self.bot.db_conn.commit()
-                await interaction.response.send_message(f"Successfully removed meter `{meter_name_lower}`", ephemeral=True)
+                await ctx.send(f"Successfully removed meter `{meter_name_lower}`", ephemeral=True)
             else:
-                await interaction.response.send_message(f"Meter `{meter_name_lower}` not found.", ephemeral=True)
+                await ctx.send(f"Meter `{meter_name_lower}` not found.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Failed to remove meter: {e}", ephemeral=True)
+            await ctx.send(f"Failed to remove meter: {e}", ephemeral=True)
 
-    @app_commands.command(name="list-actions", description="List all available joke actions")
-    async def list_actions(self, interaction: discord.Interaction):
+    @commands.hybrid_command(name="list-actions", description="List all available joke actions")
+    async def list_actions(self, ctx: commands.Context):
         try:
             cursor = self.bot.db_conn.cursor()
             cursor.execute("SELECT action_name FROM joke_actions ORDER BY action_name ASC")
             rows = cursor.fetchall()
 
             if not rows:
-                await interaction.response.send_message("No actions have been added yet.", ephemeral=True)
+                await ctx.send("No actions have been added yet.", ephemeral=True)
                 return
 
             content = "Here are all the roleplay actions you can perform.\n\n"
-            for (name,) in rows:
-                content += f"• **{name.capitalize()}** (`!{name} @user`)\n"
+            for (name_val,) in rows:
+                content += f"• **{name_val.capitalize()}** (`!{name_val} @user`)\n"
             box = box_formatter.create_box("🎭 Available Joke Actions", content)
-            await interaction.response.send_message(content=box)
+            await ctx.send(content=box)
         except Exception as e:
-            await interaction.response.send_message(f"Failed to list actions: {e}", ephemeral=True)
+            await ctx.send(f"Failed to list actions: {e}", ephemeral=True)
 
-    @app_commands.command(name="list-meters", description="List all available joke meters")
-    async def list_meters(self, interaction: discord.Interaction):
+    @commands.hybrid_command(name="list-meters", description="List all available joke meters")
+    async def list_meters(self, ctx: commands.Context):
         try:
             cursor = self.bot.db_conn.cursor()
             cursor.execute("SELECT meter_name, emoji FROM joke_meters ORDER BY meter_name ASC")
             rows = cursor.fetchall()
 
             if not rows:
-                await interaction.response.send_message("No meters have been added yet.", ephemeral=True)
+                await ctx.send("No meters have been added yet.", ephemeral=True)
                 return
 
             content = "Here are all the meters you can measure people with.\n\n"
-            for name, emoji in rows:
-                content += f"• {emoji} **{name.capitalize()}** (`!{name}`)\n"
+            for name_val, emoji in rows:
+                content += f"• {emoji} **{name_val.capitalize()}** (`!{name_val}`)\n"
             box = box_formatter.create_box("📏 Available Joke Meters", content)
-            await interaction.response.send_message(content=box)
+            await ctx.send(content=box)
         except Exception as e:
-            await interaction.response.send_message(f"Failed to list meters: {e}", ephemeral=True)
+            await ctx.send(f"Failed to list meters: {e}", ephemeral=True)
 
-    @app_commands.command(name="add-action", description="Add a new roleplay joke action")
+    @commands.hybrid_command(name="add-action", description="Add a new roleplay joke action")
     @app_commands.describe(name="The trigger word for the action (e.g., slap)", search_term="The search term to find GIFs (e.g., anime slap)")
-    @app_commands.default_permissions(administrator=True)
-    async def add_action(self, interaction: discord.Interaction, name: str, search_term: str):
-        await interaction.response.defer(ephemeral=True)
+    @commands.has_permissions(administrator=True)
+    async def add_action(self, ctx: commands.Context, name: str, search_term: str):
+        # Defers interaction if it was a slash command, otherwise typing indicator
+        await ctx.defer(ephemeral=True)
         action_name_lower = name.lower()
 
         gifs = await giphy_api.fetch_giphy_gifs(search_term)
         if not gifs:
-            await interaction.followup.send(f"Failed to find any GIFs for the search term '{search_term}'. Is your Giphy API key configured?")
+            await ctx.send(f"Failed to find any GIFs for the search term '{search_term}'. Is your Giphy API key configured?", ephemeral=True)
             return
 
         try:
@@ -234,55 +235,55 @@ class CoreCommands(commands.Cog):
             cursor = self.bot.db_conn.cursor()
             cursor.execute("INSERT OR REPLACE INTO joke_actions (action_name, gifs) VALUES (?, ?)", (action_name_lower, gifs_json))
             self.bot.db_conn.commit()
-            await interaction.followup.send(f"Successfully added/updated action `{action_name_lower}` and fetched {len(gifs)} GIFs.")
+            await ctx.send(f"Successfully added/updated action `{action_name_lower}` and fetched {len(gifs)} GIFs.", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"Failed to add action: {e}")
+            await ctx.send(f"Failed to add action: {e}", ephemeral=True)
 
-    @app_commands.command(name="remove-action", description="Remove a joke action")
+    @commands.hybrid_command(name="remove-action", description="Remove a joke action")
     @app_commands.describe(name="The trigger word of the action to remove")
-    @app_commands.default_permissions(administrator=True)
-    async def remove_action(self, interaction: discord.Interaction, name: str):
+    @commands.has_permissions(administrator=True)
+    async def remove_action(self, ctx: commands.Context, name: str):
         action_name_lower = name.lower()
         try:
             cursor = self.bot.db_conn.cursor()
             cursor.execute("DELETE FROM joke_actions WHERE action_name = ?", (action_name_lower,))
             if cursor.rowcount > 0:
                 self.bot.db_conn.commit()
-                await interaction.response.send_message(f"Successfully removed action `{action_name_lower}`", ephemeral=True)
+                await ctx.send(f"Successfully removed action `{action_name_lower}`", ephemeral=True)
             else:
-                await interaction.response.send_message(f"Action `{action_name_lower}` not found.", ephemeral=True)
+                await ctx.send(f"Action `{action_name_lower}` not found.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Failed to remove action: {e}", ephemeral=True)
+            await ctx.send(f"Failed to remove action: {e}", ephemeral=True)
 
-    @app_commands.command(name="measure", description="Measure a user's joke meter level")
+    @commands.hybrid_command(name="measure", description="Measure a user's joke meter level")
     @app_commands.describe(meter_name="The name of the meter to measure", user="The user to measure (defaults to yourself)")
-    async def measure(self, interaction: discord.Interaction, meter_name: str, user: discord.Member = None):
-        target = user if user else interaction.user
+    async def measure(self, ctx: commands.Context, meter_name: str, user: discord.Member = None):
+        target = user if user else ctx.author
 
         async def respond(content):
-            await interaction.response.send_message(content=content)
+            await ctx.send(content=content)
 
-        await self.process_meter(interaction.user, target, meter_name, respond)
+        await self.process_meter(ctx.author, target, meter_name, respond)
 
-    @app_commands.command(name="perform", description="Perform a joke action on a user")
+    @commands.hybrid_command(name="perform", description="Perform a joke action on a user")
     @app_commands.describe(action_name="The name of the action to perform", user="The user to target")
-    async def perform(self, interaction: discord.Interaction, action_name: str, user: discord.Member = None):
-        target = user if user else interaction.user
+    async def perform(self, ctx: commands.Context, action_name: str, user: discord.Member = None):
+        target = user if user else ctx.author
 
         async def respond(content):
-            await interaction.response.send_message(content=content)
+            await ctx.send(content=content)
 
-        is_action = await self.process_action(interaction.user, target, action_name, respond)
+        is_action = await self.process_action(ctx.author, target, action_name, respond)
         if not is_action:
-            box = box_formatter.create_invalid_meter_box(interaction.user)
-            await respond(content=f"<@{interaction.user.id}>\n\n{box}")
+            box = box_formatter.create_invalid_meter_box(ctx.author)
+            await respond(content=f"<@{ctx.author.id}>\n\n{box}")
 
-    @app_commands.command(name="override-scores", description="[OWNER ONLY] Edit a user's daily meter scores")
+    @commands.hybrid_command(name="override-scores", description="[OWNER ONLY] Edit a user's daily meter scores")
     @app_commands.describe(user="The user to edit")
-    async def override_scores(self, interaction: discord.Interaction, user: discord.Member):
+    async def override_scores(self, ctx: commands.Context, user: discord.Member):
         owner_id = os.getenv("OWNER_ID")
-        if str(interaction.user.id) != str(owner_id):
-            await interaction.response.send_message("You do not have permission to use this command.", ephemeral=True)
+        if str(ctx.author.id) != str(owner_id):
+            await ctx.send("You do not have permission to use this command.", ephemeral=True)
             return
 
         cursor = self.bot.db_conn.cursor()
@@ -290,7 +291,7 @@ class CoreCommands(commands.Cog):
         rows = cursor.fetchall()
 
         if not rows:
-            await interaction.response.send_message("No meters available to override.", ephemeral=True)
+            await ctx.send("No meters available to override.", ephemeral=True)
             return
 
         meter_names = [row[0] for row in rows]
@@ -311,7 +312,7 @@ class CoreCommands(commands.Cog):
 
         view = ui_overrides.OverrideView(self.bot.db_conn, user, meter_names, generate_embed)
         box = generate_embed()
-        await interaction.response.send_message(content=box, view=view, ephemeral=True)
+        await ctx.send(content=box, view=view, ephemeral=True)
 
 
 async def setup(bot):
