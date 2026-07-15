@@ -257,6 +257,7 @@ class ModerationCog(commands.Cog):
             # Status overview
             toggles_str = f"**Links:** {is_enabled('filter_links')} | **Words:** {is_enabled('filter_words')} | **English:** {is_enabled('filter_english')} | **Commands:** {is_enabled('filter_commands')} | **Spam:** {is_enabled('filter_spam')}"
             embed.add_field(name="🎛️ Filter Status", value=toggles_str, inline=False)
+            embed.add_field(name="🛡️ Anti-Nuke Status", value=is_enabled('antinuke'), inline=False)
 
             embed.add_field(name="💬 General Channel", value=f"{gen_str}\n*(Enforces English-only and blocks bot commands)*", inline=False)
             embed.add_field(name="🗑️ Spam Channel", value=f"{spam_str}\n*(Exempt from spam/velocity rules)*", inline=False)

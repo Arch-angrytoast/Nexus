@@ -74,6 +74,7 @@ class NexusBot(commands.Bot):
         await self.load_extension("cogs.automod")
         await self.load_extension("cogs.help")
         await self.load_extension("cogs.status")
+        await self.load_extension("cogs.antinuke")
 
         try:
             synced = await self.tree.sync()

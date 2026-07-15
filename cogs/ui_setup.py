@@ -37,20 +37,21 @@ class BannedWordsModal(discord.ui.Modal, title='Manage Banned Words'):
         row = cursor.fetchone()
         is_enabled = row[0] == "1" if row else True
 
-        trigger = discord.AutoModTrigger(keyword_filter=words_list)
+        trigger_metadata = {"keyword_filter": words_list}
         action = discord.AutoModRuleAction(custom_message="Your message was blocked by Nexus because it contained a banned word. You have been issued a warning.")
 
         try:
             if nexus_rule:
                 if words_list:
-                    await nexus_rule.edit(trigger=trigger, actions=[action], enabled=is_enabled)
+                    await nexus_rule.edit(trigger_metadata=discord.AutoModTrigger(keyword_filter=words_list), actions=[action], enabled=is_enabled)
                 else:
                     await nexus_rule.delete() # Nothing to ban
             elif words_list:
                 await guild.create_automod_rule(
                     name=rule_name,
                     event_type=discord.AutoModRuleEventType.message_send,
-                    trigger=trigger,
+                    trigger_type=discord.AutoModRuleTriggerType.keyword,
+                    trigger_metadata=discord.AutoModTrigger(keyword_filter=words_list),
                     actions=[action],
                     enabled=is_enabled,
                     reason="Nexus Automod Dashboard Sync"
@@ -72,7 +73,8 @@ class FilterToggleView(discord.ui.View):
             "filter_words": "🤬 Banned Words",
             "filter_english": "🗣️ English-Only",
             "filter_commands": "🤖 Bot Commands",
-            "filter_spam": "🗑️ Spam/Velocity"
+            "filter_spam": "🗑️ Spam/Velocity",
+            "antinuke": "🛡️ Anti-Nuke Protection"
         }
 
         for key, label in self.filters.items():
@@ -164,7 +166,7 @@ class MainSetupDropdown(discord.ui.Select):
             discord.SelectOption(label="Set General Channel", description="Select the channel for English-only rules", emoji="💬", value="general_channel"),
             discord.SelectOption(label="Set Spam Channel", description="Select the channel exempt from spam rules", emoji="🗑️", value="spam_channel"),
             discord.SelectOption(label="Manage Banned Words", description="Edit the server's profanity blacklist", emoji="🛑", value="banned_words"),
-            discord.SelectOption(label="Toggle Automod Filters", description="Turn specific automod filters ON or OFF", emoji="⚙️", value="toggles")
+            discord.SelectOption(label="Toggle Automod/Anti-Nuke", description="Turn specific filters or Anti-Nuke ON/OFF", emoji="⚙️", value="toggles")
         ]
         super().__init__(placeholder="Choose an automod setting to configure...", min_values=1, max_values=1, options=options)
 

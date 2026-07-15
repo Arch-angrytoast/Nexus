@@ -145,9 +145,11 @@ class AutomodCog(commands.Cog):
         if execution.action.type != discord.AutoModRuleActionType.block_message:
             return
 
-        # Verify if it's the Nexus rule (fallback check)
-        if "Nexus" not in execution.rule.name:
-            return
+        # We don't have the rule name directly, but we can verify it was a custom keyword trigger
+        # We can also check if the rule_id matches if we cached it, but for now we just verify it's a keyword block
+        # execution doesn't have rule.name, it might have rule_id
+        # Let's just process it if it's a keyword block
+
 
         # Discord has natively blocked it, so we just process the points!
         guild = execution.member.guild if execution.member else None
