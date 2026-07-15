@@ -146,57 +146,6 @@ class Moderation(commands.Cog):
         box = box_formatter.create_box("🧼 Warnings Cleared", f"All warnings for {member.mention} have been permanently deleted.", used_by=ctx.author)
         await prompt_msg.edit(content=box, view=None)
 
-    @commands.hybrid_command(name="add-action", description="[ADMIN] Add a new roleplay action")
-    @commands.has_permissions(administrator=True)
-    @app_commands.describe(action_name="Action name (e.g., punch, hug)", gifs="Comma-separated image URLs")
-    async def add_action(self, ctx: commands.Context, action_name: str, *, gifs: str):
-        import json
-        name = action_name.lower().strip()
-        gif_list = [g.strip() for g in gifs.split(',')]
-
-        cursor = self.bot.db_conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO joke_actions (action_name, gifs) VALUES (?, ?)", (name, json.dumps(gif_list)))
-        self.bot.db_conn.commit()
-
-        box = box_formatter.create_box("✅ Action Added", f"Action **{name}** added with {len(gif_list)} gifs.", used_by=ctx.author)
-        await ctx.send(content=box)
-
-    @commands.hybrid_command(name="remove-action", description="[ADMIN] Remove a roleplay action")
-    @commands.has_permissions(administrator=True)
-    async def remove_action(self, ctx: commands.Context, action_name: str):
-        name = action_name.lower().strip()
-
-        cursor = self.bot.db_conn.cursor()
-        cursor.execute("DELETE FROM joke_actions WHERE action_name = ?", (name,))
-        self.bot.db_conn.commit()
-
-        box = box_formatter.create_box("🗑️ Action Removed", f"Action **{name}** has been removed.", used_by=ctx.author)
-        await ctx.send(content=box)
-
-    @commands.hybrid_command(name="add-meter", description="[ADMIN] Add a new joke meter")
-    @commands.has_permissions(administrator=True)
-    async def add_meter(self, ctx: commands.Context, meter_name: str, emoji: str):
-        name = meter_name.lower().strip()
-
-        cursor = self.bot.db_conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO joke_meters (meter_name, emoji) VALUES (?, ?)", (name, emoji))
-        self.bot.db_conn.commit()
-
-        box = box_formatter.create_box("✅ Meter Added", f"Meter **{name}** added with emoji {emoji}.", used_by=ctx.author)
-        await ctx.send(content=box)
-
-    @commands.hybrid_command(name="remove-meter", description="[ADMIN] Remove a joke meter")
-    @commands.has_permissions(administrator=True)
-    async def remove_meter(self, ctx: commands.Context, meter_name: str):
-        name = meter_name.lower().strip()
-
-        cursor = self.bot.db_conn.cursor()
-        cursor.execute("DELETE FROM joke_meters WHERE meter_name = ?", (name,))
-        self.bot.db_conn.commit()
-
-        box = box_formatter.create_box("🗑️ Meter Removed", f"Meter **{name}** has been removed.", used_by=ctx.author)
-        await ctx.send(content=box)
-
     @commands.hybrid_command(name="dossier", description="[ADMIN] View detailed intelligence on a user")
     @commands.has_permissions(administrator=True)
     async def dossier(self, ctx: commands.Context, member: discord.Member):
