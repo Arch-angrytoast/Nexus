@@ -49,39 +49,39 @@ class AutomodCog(commands.Cog):
         return "Warned"
 
     async def issue_warning(self, message: discord.Message, reason: str, points: int):
+        await self.process_warning(message.guild, message.author, message.channel, reason, points)
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+    async def process_warning(self, guild: discord.Guild, member: discord.Member, channel, reason: str, points: int):
         # 1. Save to DB
         utc_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         cursor = self.bot.db_conn.cursor()
         cursor.execute(
             "INSERT INTO warnings (user_id, mod_id, reason, points, timestamp) VALUES (?, ?, ?, ?, ?)",
-            (message.author.id, self.bot.user.id, f"[AUTOMOD] {reason}", points, utc_now)
+            (member.id, self.bot.user.id, f"[AUTOMOD] {reason}", points, utc_now)
         )
         self.bot.db_conn.commit()
 
-        # 2. Delete the offending message
-        try:
-            await message.delete()
-        except discord.NotFound:
-            pass
-        except discord.Forbidden:
-            pass
-
-        # 3. Calculate total points in last 30 days
+        # 2. Calculate total points in last 30 days
         thirty_days_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)).isoformat()
         cursor.execute(
             "SELECT SUM(points) FROM warnings WHERE user_id = ? AND timestamp > ?",
-            (message.author.id, thirty_days_ago)
+            (member.id, thirty_days_ago)
         )
         total_points = cursor.fetchone()[0] or 0
 
-        # 4. Apply Automod Punishment
-        action_taken = await self.apply_escalation(message.guild, message.author, total_points)
+        # 3. Apply Automod Punishment
+        action_taken = await self.apply_escalation(guild, member, total_points)
 
-        # 5. Notify user in channel
-        try:
-            await message.channel.send(f"⚠️ {message.author.mention}, you have been warned for **{reason}** (+{points} pts). Total: {total_points} pts. Action: {action_taken}", delete_after=10)
-        except discord.Forbidden:
-            pass
+        # 4. Notify user in channel
+        if channel:
+            try:
+                await channel.send(f"⚠️ {member.mention}, you have been warned for **{reason}** (+{points} pts). Total: {total_points} pts. Action: {action_taken}", delete_after=10)
+            except Exception:
+                pass
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -108,14 +108,7 @@ class AutomodCog(commands.Cog):
             await self.issue_warning(message, "Posting Unauthorized Invites", 3)
             return
 
-        # 2. Check Banned Words (Rule 2 filter bypassing)
-        if is_enabled("filter_words"):
-            banned_words_str = self.get_config("banned_words")
-            if banned_words_str:
-                banned_words_list = [w.strip() for w in banned_words_str.split(',') if w.strip()]
-                if any(word in content_lower for word in banned_words_list):
-                    await self.issue_warning(message, "Using Banned Words", 4)
-                    return
+
 
         # 3. Check English-Only (Rule 3)
         if is_enabled("filter_english") and is_general:
@@ -145,6 +138,29 @@ class AutomodCog(commands.Cog):
                 self.spam_tracker[message.author.id] = []
                 await self.issue_warning(message, "Spamming messages", 2)
                 return
+
+    @commands.Cog.listener()
+    async def on_automod_action(self, execution: discord.AutoModAction):
+        # Only process block actions from our specific rule to avoid double counting
+        if execution.action.type != discord.AutoModRuleActionType.block_message:
+            return
+
+        # Verify if it's the Nexus rule (fallback check)
+        if "Nexus" not in execution.rule.name:
+            return
+
+        # Discord has natively blocked it, so we just process the points!
+        guild = execution.member.guild if execution.member else None
+        if not guild or not execution.member:
+            return
+
+        channel = guild.get_channel(execution.channel_id)
+
+        # The word they got caught using
+        trigger_word = execution.matched_keyword or "a banned word"
+        reason = f"Using Banned Words ({trigger_word})"
+
+        await self.process_warning(guild, execution.member, channel, reason, 4)
 
 async def setup(bot):
     await bot.add_cog(AutomodCog(bot))

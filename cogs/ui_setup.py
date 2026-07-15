@@ -17,12 +17,47 @@ class BannedWordsModal(discord.ui.Modal, title='Manage Banned Words'):
         self.words_input.default = current_words
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         cursor = self.db_conn.cursor()
-        clean_words = ", ".join([w.strip().lower() for w in self.words_input.value.split(',') if w.strip()])
+        words_list = [w.strip().lower() for w in self.words_input.value.split(',') if w.strip()]
+        clean_words = ", ".join(words_list)
         cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", ("banned_words", clean_words))
         self.db_conn.commit()
 
-        await interaction.response.defer()
+        # Sync with Discord's Native Automod
+        guild = interaction.guild
+        rule_name = "Nexus Banned Words"
+
+        # Check if the rule already exists
+        existing_rules = await guild.fetch_automod_rules()
+        nexus_rule = next((r for r in existing_rules if r.name == rule_name), None)
+
+        # Check if filter is globally enabled
+        cursor.execute("SELECT value FROM server_config WHERE key = ?", ("filter_words",))
+        row = cursor.fetchone()
+        is_enabled = row[0] == "1" if row else True
+
+        trigger = discord.AutoModTrigger(keyword_filter=words_list)
+        action = discord.AutoModRuleAction(custom_message="Your message was blocked by Nexus because it contained a banned word. You have been issued a warning.")
+
+        try:
+            if nexus_rule:
+                if words_list:
+                    await nexus_rule.edit(trigger=trigger, actions=[action], enabled=is_enabled)
+                else:
+                    await nexus_rule.delete() # Nothing to ban
+            elif words_list:
+                await guild.create_automod_rule(
+                    name=rule_name,
+                    event_type=discord.AutoModRuleEventType.message_send,
+                    trigger=trigger,
+                    actions=[action],
+                    enabled=is_enabled,
+                    reason="Nexus Automod Dashboard Sync"
+                )
+        except discord.Forbidden:
+            pass # Lacks Manage Server permissions
+
         await self.view_to_refresh.refresh_embed(interaction)
 
 
@@ -65,17 +100,32 @@ class FilterToggleView(discord.ui.View):
         btn = discord.ui.Button(label=label, style=style)
 
         async def btn_callback(interaction: discord.Interaction):
+            await interaction.response.defer()
             new_val = "0" if self.is_enabled(key) else "1"
             cursor = self.db_conn.cursor()
             cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (key, new_val))
             self.db_conn.commit()
+
+            # If toggling banned words, sync state with Discord
+            if key == "filter_words":
+                try:
+                    guild = interaction.guild
+                    existing_rules = await guild.fetch_automod_rules()
+                    nexus_rule = next((r for r in existing_rules if r.name == "Nexus Banned Words"), None)
+                    if nexus_rule:
+                        await nexus_rule.edit(enabled=(new_val == "1"))
+                except discord.Forbidden:
+                    pass
 
             # Refresh the buttons
             btn.style = discord.ButtonStyle.success if new_val == "1" else discord.ButtonStyle.danger
 
             # Also refresh the main embed
             embed = self.parent_view.generate_embed_func()
-            await interaction.response.edit_message(embed=embed, view=self)
+            try:
+                await interaction.edit_original_response(embed=embed, view=self)
+            except discord.NotFound:
+                pass
 
         btn.callback = btn_callback
         return btn

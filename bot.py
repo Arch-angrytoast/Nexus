@@ -62,6 +62,8 @@ class NexusBot(commands.Bot):
         intents.message_content = True
         intents.members = True
         intents.presences = True
+        intents.auto_moderation_configuration = True
+        intents.auto_moderation_execution = True
         super().__init__(command_prefix=PREFIX, intents=intents, help_command=None)
         self.db_conn = init_db()
 
