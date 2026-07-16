@@ -45,9 +45,10 @@ class HelpDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         if self.values[0] == "home":
-            from . import box_formatter
-            box = box_formatter.create_box("Nexus Help Menu", "Welcome to the Nexus help menu! Please select a category from the dropdown below to see the available commands.")
-            await interaction.response.edit_message(content=box, embed=None)
+            from . import embed_factory
+            embed = embed_factory.create_clean_embed("Nexus Help Menu", "Welcome to the Nexus help menu! Please select a category from the dropdown below to see the available commands.")
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url if self.bot.user.display_avatar else None)
+            await interaction.response.edit_message(embed=embed)
             return
 
         selected_cog_name = self.values[0]
@@ -65,7 +66,7 @@ class HelpDropdown(discord.ui.Select):
             await interaction.response.send_message("Could not load commands for this category.", ephemeral=True)
             return
 
-        from . import box_formatter
+        from . import embed_factory
         content = f"*{getattr(target_cog, 'description', '')}*\n\n"
 
         prefix = self.bot.command_prefix
@@ -86,8 +87,8 @@ class HelpDropdown(discord.ui.Select):
             command_desc = cmd.description or cmd.short_doc or "No description provided."
             content += f"**{command_usage}**\n{command_desc}\n\n"
 
-        box = box_formatter.create_box(f"{selected_cog_name} Commands", content.strip(), footer_text="Parameters wrapped in <> are required, [] are optional.")
-        await interaction.response.edit_message(content=box, embed=None)
+        embed = embed_factory.create_clean_embed(f"{selected_cog_name} Commands", content.strip(), footer_text="Parameters wrapped in <> are required, [] are optional.")
+        await interaction.response.edit_message(embed=embed)
 
 
 class HelpView(discord.ui.View):

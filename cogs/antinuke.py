@@ -77,13 +77,13 @@ class AntiNukeCog(commands.Cog):
         if owner_id and owner_id != "None" and owner_id != "your_discord_user_id_here":
             try:
                 owner_user = await self.bot.fetch_user(int(owner_id))
-                from . import box_formatter
+                from . import embed_factory
                 content = f"A severe threat was detected in **{guild.name}**.\n\n"
                 content += f"**Rogue User:** {rogue_user.mention} (`{rogue_user.id}`)\n*{rogue_user.name}*\n\n"
                 content += f"**Trigger Reason:** {reason}\n\n"
                 content += f"**Action Taken:** {punishment_taken}"
-                box = box_formatter.create_box("🚨 ANTI-NUKE TRIGGERED 🚨", content)
-                await owner_user.send(content=box)
+                embed = embed_factory.create_clean_embed("🚨 ANTI-NUKE TRIGGERED 🚨", content, color=discord.Color.brand_red())
+                await owner_user.send(embed=embed)
             except Exception as e:
                 print(f"Failed to DM owner about Anti-Nuke: {e}")
 

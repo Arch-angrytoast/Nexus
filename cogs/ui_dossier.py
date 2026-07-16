@@ -2,7 +2,7 @@ import discord
 import sqlite3
 import datetime
 from . import snark_pool
-from . import box_formatter
+from . import embed_factory
 
 class DossierView(discord.ui.View):
     def __init__(self, target: discord.Member, db_conn: sqlite3.Connection):
@@ -11,7 +11,7 @@ class DossierView(discord.ui.View):
         self.db_conn = db_conn
         self.current_page = "identity"
 
-    def generate_identity_embed(self) -> str:
+    def generate_identity_embed(self) -> discord.Embed:
         created_at = f"<t:{int(self.target.created_at.timestamp())}:R>"
         joined_at = f"<t:{int(self.target.joined_at.timestamp())}:R>" if self.target.joined_at else "Unknown"
 
@@ -36,7 +36,7 @@ class DossierView(discord.ui.View):
 
         roles = [r.mention for r in reversed(self.target.roles) if r != self.target.guild.default_role]
         roles_str = " ".join(roles[:10]) + ("..." if len(roles) > 10 else "")
-        roles_str = roles_str if roles else "None"
+
 
         acts = []
         if self.target.activities:
@@ -57,9 +57,9 @@ class DossierView(discord.ui.View):
         content += f"**🏷️ Key Roles**\n{roles_str}\n\n"
         content += f"**🎮 Current Activities**\n{acts_str}"
 
-        return box_formatter.create_box("CLASSIFIED DOSSIER - Identity", content)
+        return embed_factory.create_clean_embed("CLASSIFIED DOSSIER - Identity", content, thumbnail_url=self.target.display_avatar.url if self.target.display_avatar else None)
 
-    def generate_moderation_embed(self) -> str:
+    def generate_moderation_embed(self) -> discord.Embed:
         cursor = self.db_conn.cursor()
 
         thirty_days_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)).isoformat()
@@ -80,9 +80,9 @@ class DossierView(discord.ui.View):
         else:
             content += "Clean record."
 
-        return box_formatter.create_box("CLASSIFIED DOSSIER - Moderation", content)
+        return embed_factory.create_clean_embed("CLASSIFIED DOSSIER - Moderation", content, thumbnail_url=self.target.display_avatar.url if self.target.display_avatar else None, color=discord.Color.brand_red())
 
-    def generate_nexus_embed(self) -> str:
+    def generate_nexus_embed(self) -> discord.Embed:
         cursor = self.db_conn.cursor()
 
         content = f"**Target:** {self.target.mention}\nData gathered from Nexus Joke Meters.\n\n"
@@ -102,18 +102,18 @@ class DossierView(discord.ui.View):
         else:
             content += "No meters available in database."
 
-        return box_formatter.create_box("CLASSIFIED DOSSIER - Nexus Intel", content)
+        return embed_factory.create_clean_embed("CLASSIFIED DOSSIER - Nexus Intel", content, thumbnail_url=self.target.display_avatar.url if self.target.display_avatar else None, color=discord.Color.purple())
 
     async def update_page(self, interaction: discord.Interaction):
-        box = None
+        embed = None
         if self.current_page == "identity":
-            box = self.generate_identity_embed()
+            embed = self.generate_identity_embed()
         elif self.current_page == "mod":
-            box = self.generate_moderation_embed()
+            embed = self.generate_moderation_embed()
         elif self.current_page == "nexus":
-            box = self.generate_nexus_embed()
+            embed = self.generate_nexus_embed()
 
-        await interaction.response.edit_message(content=box, embed=None, view=self)
+        await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="Discord Identity", emoji="📘", style=discord.ButtonStyle.primary, row=0)
     async def btn_identity(self, interaction: discord.Interaction, button: discord.ui.Button):

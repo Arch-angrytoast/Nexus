@@ -79,13 +79,13 @@ class AutomodCog(commands.Cog):
         # 4. Notify user in channel
         if channel:
             try:
-                from . import box_formatter
+                from . import embed_factory
                 content = f"**{member.mention}**, you violated a server rule.\n\n"
                 content += f"**Reason:** {reason}\n"
                 content += f"**Points:** +{points}\n"
                 content += f"**Action Taken:** {action_taken}\n"
-                box = box_formatter.create_box("⚠️ Warning Issued", content, footer_text=f"Total Points: {total_points}/100")
-                await channel.send(content=box, delete_after=15)
+                embed = embed_factory.create_clean_embed("⚠️ Warning Issued", content, footer_text=f"Total Points: {total_points}/100")
+                await channel.send(embed=embed, delete_after=15)
             except Exception:
                 pass
 

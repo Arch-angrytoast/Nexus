@@ -9,11 +9,13 @@ class CustomHelpCommand(commands.HelpCommand):
         # mapping is a dict of Cog: List[Command]
         channel = self.get_destination()
 
-        from . import box_formatter
-        box = box_formatter.create_box("Nexus Help Menu", "Welcome to the Nexus help menu! Please select a category from the dropdown below to see the available commands.")
+        from . import embed_factory
+        embed = embed_factory.create_clean_embed("Nexus Help Menu", "Welcome to the Nexus help menu! Please select a category from the dropdown below to see the available commands.")
+        if self.context.bot.user.display_avatar:
+            embed.set_thumbnail(url=self.context.bot.user.display_avatar.url)
 
         view = HelpView(self.context.bot, mapping)
-        await channel.send(content=box, view=view)
+        await channel.send(embed=embed, view=view)
 
     async def send_cog_help(self, cog):
         await self.send_bot_help(self.context.bot.cogs.items())

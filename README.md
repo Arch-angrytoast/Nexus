@@ -42,3 +42,9 @@ Upon running for the first time, Nexus will automatically generate `bot_data.db`
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0) - see the [LICENSE](LICENSE) file for details.
+
+### Version 2.0 Updates
+* **Hybrid Commands:** All core, admin, moderation, and utility commands are now hybrid, meaning they support both standard prefixes (e.g., `!ban`) and Discord slash commands (e.g., `/ban`). Joke Actions and Joke Meters deliberately remain slash-only.
+* **Support Ticket System:** Users can easily spawn private support tickets by clicking a button. Admins can configure the panel title, panel description, ticket category, and the specific support role pinged via the `/setup-tickets-config` UI.
+* **Utility Commands:** A robust suite of owner-exclusive commands has been added to monitor bot health and perform system diagnostics (`/status`, `/uptime`, `/diagnostics`, `/server-insights`).
+* **Universal UI Aesthetic:** To match modern visual standards, normal `discord.Embed` messages have all been upgraded via the `embed_factory.py`. They now utilize the `#2B2D31` color hex, which blends seamlessly into Discord's dark mode, removing the colored left-border line for a super clean "box" aesthetic!

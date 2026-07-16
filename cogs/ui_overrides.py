@@ -70,7 +70,7 @@ class OverrideView(discord.ui.View):
     async def update_embed(self, interaction: discord.Interaction):
         box = self.generate_embed_func()
         try:
-            await interaction.edit_original_response(content=box, embed=None, view=self)
+            await interaction.edit_original_response(embed=box, view=self)
         except Exception:
             pass # Failsafe if interaction expired
 
