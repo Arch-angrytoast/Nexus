@@ -200,3 +200,6 @@ class Tickets(commands.Cog):
                 await ctx.message.delete()
             except:
                 pass
+
+async def setup(bot):
+    await bot.add_cog(Tickets(bot))
