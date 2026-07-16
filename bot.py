@@ -73,6 +73,19 @@ def init_db():
         )
     ''')
     conn.commit()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ticket_buttons (
+            button_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            panel_id TEXT,
+            label TEXT,
+            emoji TEXT,
+            ping_role_id TEXT,
+            category_id TEXT
+        )
+    ''')
+    conn.commit()
+
     return conn
 
 class NexusBot(commands.Bot):
@@ -96,6 +109,7 @@ class NexusBot(commands.Bot):
         await self.load_extension("cogs.antinuke")
         await self.load_extension("cogs.tickets")
         await self.load_extension("cogs.utility")
+        await self.load_extension("cogs.misc")
 
         try:
             synced = await self.tree.sync()

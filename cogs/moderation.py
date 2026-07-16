@@ -203,7 +203,7 @@ class Moderation(commands.Cog):
         view = ui_dossier.DossierView(member, self.bot.db_conn)
         box = view.generate_identity_embed()
 
-        await ctx.send(embed=embed, view=view, ephemeral=True)
+        await ctx.send(embed=box, view=view, ephemeral=True)
 
     @commands.hybrid_command(name="setup", description="[OWNER ONLY] Configure server channels and automod features")
     async def setup(self, ctx: commands.Context):

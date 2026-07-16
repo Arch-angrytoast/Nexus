@@ -1,21 +1,23 @@
-# Nexus: The Discord Joke Meter
+# Nexus: Advanced Discord Bot & Joke Meters
 
-A highly customizable Discord bot (Nexus) built with `discord.py` and `sqlite3` that features dynamic "Joke Meters." It measures users with daily, deterministic scoring, providing fun progress bars and snarky commentary based on the results.
+A highly customizable Discord bot (Nexus) built with `discord.py` and `sqlite3` featuring robust moderation, anti-nuke tools, a highly customizable advanced ticket system, comprehensive utility/misc commands, and dynamic "Joke Meters."
 
 ## Features
 
-- **Daily Deterministic Scores:** Users receive the same score for a specific meter for 24 hours. The seed is built from their User ID, the meter name, and the current UTC date.
-- **Snark Pool:** Scores are categorized into 4 tiers, pulling random, snarky responses formatted into an invisible-UI embed.
-- **Hybrid Command System:**
-  - **Prefix Listener:** Users can type commands like `!sigma @User` or reply to a message with `!sigma`.
-  - **Slash Command:** A `/measure [meter] [user]` command for easy use in bot channels.
-- **Admin Management:** Discord Administrators can use `/add-meter` and `/remove-meter` to dynamically update the bot's database on the fly.
+- **Dynamic Joke Meters:** Measures users with daily, deterministic scoring, providing fun progress bars and snarky commentary based on the results. Seed is built from their User ID, meter name, and UTC date.
+- **Roleplay Actions:** Kiss, hug, slap, or pat other users with random Giphy-powered GIFs via Slash commands.
+- **Advanced Ticket System:** Highly customizable ticket UI builder! Admins can use `/ticket-setup` to create and publish multi-button ticket panels. Each button can be customized with its own label, emoji, specific ping role, and target category. `/ticket-config` handles global fallbacks.
+- **Moderation & Automod:** Warning systems, timeout, kick, ban, purge, and an AI-less basic Automod (banned words, anti-spam, invite blocking).
+- **Anti-Nuke Systems:** Protects your server against mass bans, kicks, channel deletions, and role tampering.
+- **Comprehensive Utilities:** Over 20 hybrid utility commands (e.g., `!avatar`, `!coinflip`, `!serverinfo`, `!math`, `!poll`) plus owner-exclusive system diagnostics (`/status`, `/uptime`, `/diagnostics`, `/server-insights`).
+- **Universal Invisible UI:** All embeds are formatted with Discord's `#2B2D31` background hex using `embed_factory.py`, removing the colored left border for a clean, seamless integration into Discord's dark mode.
+- **Hybrid Command System:** Almost all commands support both standard prefixes (e.g., `!ban`) and Discord slash commands (e.g., `/ban`). Joke Actions and Joke Meters deliberately remain slash-only/prefix-hybrid as requested.
 
 ## Prerequisites
 
 - Python 3.10+
 - A Discord Bot Token (created from the [Discord Developer Portal](https://discord.com/developers/applications)).
-- Nexus must have **Message Content Intent** enabled in the Developer Portal.
+- Nexus must have **Message Content**, **Server Members**, and **Presence** Intents enabled in the Developer Portal.
 
 ## Setup
 
@@ -29,8 +31,8 @@ A highly customizable Discord bot (Nexus) built with `discord.py` and `sqlite3` 
    ```env
    DISCORD_TOKEN=your_discord_bot_token_here
    COMMAND_PREFIX=!
-GIPHY_API_KEY=your_giphy_api_key_here
-OWNER_ID=your_discord_user_id_here
+   GIPHY_API_KEY=your_giphy_api_key_here
+   OWNER_ID=your_discord_user_id_here
    ```
 4. **Run Nexus:**
    ```bash
@@ -42,9 +44,3 @@ Upon running for the first time, Nexus will automatically generate `bot_data.db`
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0) - see the [LICENSE](LICENSE) file for details.
-
-### Version 2.0 Updates
-* **Hybrid Commands:** All core, admin, moderation, and utility commands are now hybrid, meaning they support both standard prefixes (e.g., `!ban`) and Discord slash commands (e.g., `/ban`). Joke Actions and Joke Meters deliberately remain slash-only.
-* **Support Ticket System:** Users can easily spawn private support tickets by clicking a button. Admins can configure the panel title, panel description, ticket category, and the specific support role pinged via the `/setup-tickets-config` UI.
-* **Utility Commands:** A robust suite of owner-exclusive commands has been added to monitor bot health and perform system diagnostics (`/status`, `/uptime`, `/diagnostics`, `/server-insights`).
-* **Universal UI Aesthetic:** To match modern visual standards, normal `discord.Embed` messages have all been upgraded via the `embed_factory.py`. They now utilize the `#2B2D31` color hex, which blends seamlessly into Discord's dark mode, removing the colored left-border line for a super clean "box" aesthetic!
