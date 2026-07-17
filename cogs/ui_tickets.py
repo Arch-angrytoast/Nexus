@@ -6,12 +6,81 @@ from . import embed_factory
 
 # --- TICKET CREATION LOGIC (Used by the final published panel) ---
 
-class CloseTicketView(discord.ui.View):
+
+import io
+import asyncio
+
+class TicketManageView(discord.ui.View):
     def __init__(self, db_conn: sqlite3.Connection):
         super().__init__(timeout=None)
         self.db_conn = db_conn
 
-    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.danger, custom_id="close_ticket_btn", emoji="🔒")
+    def check_permissions(self, interaction: discord.Interaction):
+        # Allow admins to manage, but also let the creator manage.
+        # This is a bit complex without storing creator ID properly in button clicks if they aren't admin.
+        # For simplicity, anyone with manage_channels can do this, or we can just allow anyone to click for now and check in callback.
+        # We will check manage_channels for staff actions.
+        return True
+
+    @discord.ui.button(label="Claim", style=discord.ButtonStyle.primary, custom_id="tm_claim_btn", emoji="👋")
+    async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_channels:
+            await interaction.response.send_message("Only staff can claim tickets.", ephemeral=True)
+            return
+
+        embed = embed_factory.create_clean_embed("Ticket Claimed", f"This ticket will be handled by {interaction.user.mention}.")
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="Unclaim", style=discord.ButtonStyle.secondary, custom_id="tm_unclaim_btn", emoji="🛑")
+    async def unclaim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_channels:
+            await interaction.response.send_message("Only staff can unclaim tickets.", ephemeral=True)
+            return
+
+        embed = embed_factory.create_clean_embed("Ticket Unclaimed", "This ticket is now unassigned.")
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="Lock", style=discord.ButtonStyle.secondary, custom_id="tm_lock_btn", emoji="🔒")
+    async def lock_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_channels:
+            await interaction.response.send_message("Only staff can lock tickets.", ephemeral=True)
+            return
+
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT user_id FROM tickets WHERE channel_id = ? AND status = 'open'", (interaction.channel.id,))
+        row = cursor.fetchone()
+        if not row:
+            await interaction.response.send_message("Ticket not found.", ephemeral=True)
+            return
+
+        member = interaction.guild.get_member(row[0])
+        if member:
+            await interaction.channel.set_permissions(member, send_messages=False, read_messages=True)
+
+        embed = embed_factory.create_clean_embed("Ticket Locked", "The ticket creator can no longer send messages.")
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="Unlock", style=discord.ButtonStyle.secondary, custom_id="tm_unlock_btn", emoji="🔓")
+    async def unlock_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_channels:
+            await interaction.response.send_message("Only staff can unlock tickets.", ephemeral=True)
+            return
+
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT user_id FROM tickets WHERE channel_id = ? AND status = 'open'", (interaction.channel.id,))
+        row = cursor.fetchone()
+        if not row:
+            await interaction.response.send_message("Ticket not found.", ephemeral=True)
+            return
+
+        member = interaction.guild.get_member(row[0])
+        if member:
+            await interaction.channel.set_permissions(member, send_messages=True, read_messages=True)
+
+        embed = embed_factory.create_clean_embed("Ticket Unlocked", "The ticket creator can now send messages.")
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, custom_id="tm_close_btn", emoji="✖️")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         cursor = self.db_conn.cursor()
         cursor.execute("SELECT ticket_id FROM tickets WHERE channel_id = ? AND status = 'open'", (interaction.channel.id,))
@@ -25,16 +94,56 @@ class CloseTicketView(discord.ui.View):
         cursor.execute("UPDATE tickets SET status = 'closed' WHERE ticket_id = ?", (ticket_id,))
         self.db_conn.commit()
 
-        embed = embed_factory.create_clean_embed("🔒 Ticket Closed", f"Ticket #{ticket_id} closed by {interaction.user.mention}. Deleting in 5 seconds.")
+        embed = embed_factory.create_clean_embed("Ticket Closed", f"Ticket #{ticket_id} closed by {interaction.user.mention}. Deleting in 5 seconds.")
         await interaction.response.send_message(embed=embed)
 
-        import asyncio
         await asyncio.sleep(5)
         try:
             await interaction.channel.delete()
         except:
             pass
 
+    @discord.ui.button(label="Close + Transcript", style=discord.ButtonStyle.danger, custom_id="tm_close_trans_btn", emoji="📄")
+    async def close_with_transcript(self, interaction: discord.Interaction, button: discord.ui.Button):
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT ticket_id, user_id FROM tickets WHERE channel_id = ? AND status = 'open'", (interaction.channel.id,))
+        row = cursor.fetchone()
+
+        if not row:
+            await interaction.response.send_message("This does not appear to be an open ticket channel.", ephemeral=True)
+            return
+
+        ticket_id, creator_id = row
+        cursor.execute("UPDATE tickets SET status = 'closed' WHERE ticket_id = ?", (ticket_id,))
+        self.db_conn.commit()
+
+        await interaction.response.defer()
+
+        # Generate transcript
+        messages = [message async for message in interaction.channel.history(limit=500, oldest_first=True)]
+        transcript = ""
+        for msg in messages:
+            time_str = msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            transcript += f"[{time_str}] {msg.author}: {msg.clean_content}\n"
+
+        file = discord.File(io.BytesIO(transcript.encode('utf-8')), filename=f"transcript_ticket_{ticket_id}.txt")
+
+        # Try to DM creator
+        creator = interaction.guild.get_member(creator_id)
+        if creator:
+            try:
+                await creator.send(f"Transcript for your ticket #{ticket_id}", file=file)
+            except:
+                pass
+
+        embed = embed_factory.create_clean_embed("Ticket Closed", f"Ticket #{ticket_id} closed by {interaction.user.mention}. Transcript generated. Deleting in 5 seconds.")
+        await interaction.followup.send(embed=embed)
+
+        await asyncio.sleep(5)
+        try:
+            await interaction.channel.delete()
+        except:
+            pass
 class UserTicketModal(discord.ui.Modal, title='Open Ticket'):
     subject = discord.ui.TextInput(label='Subject', placeholder='Short description...', min_length=3, max_length=50)
     description = discord.ui.TextInput(label='Description', style=discord.TextStyle.long, min_length=10, max_length=1000)
@@ -104,7 +213,7 @@ class UserTicketModal(discord.ui.Modal, title='Open Ticket'):
             if support_role:
                 ping_str += f" {support_role.mention}"
 
-            await ticket_channel.send(content=ping_str, embed=embed, view=CloseTicketView(self.db_conn))
+            await ticket_channel.send(content=ping_str, embed=embed, view=TicketManageView(self.db_conn))
             await interaction.followup.send(f"Ticket created: {ticket_channel.mention}", ephemeral=True)
         except Exception as e:
             cursor.execute("DELETE FROM tickets WHERE ticket_id = ?", (ticket_id,))

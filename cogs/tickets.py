@@ -14,7 +14,7 @@ class Tickets(commands.Cog):
     async def on_ready(self):
         # Register persistent published views
         self.bot.add_view(ui_tickets.PublishedPanelView(self.db_conn))
-        self.bot.add_view(ui_tickets.CloseTicketView(self.db_conn))
+        self.bot.add_view(ui_tickets.TicketManageView(self.db_conn))
 
     @commands.hybrid_command(name="ticket-setup", description="[ADMIN] Open the Ticket Panel Builder")
     @commands.has_permissions(administrator=True)
