@@ -81,6 +81,12 @@ def init_db():
     ''')
     conn.commit()
 
+    try:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN panel_id TEXT DEFAULT 'default'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ticket_buttons (
             button_id INTEGER PRIMARY KEY AUTOINCREMENT,
