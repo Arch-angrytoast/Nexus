@@ -1,46 +1,103 @@
-# Nexus: Advanced Discord Bot & Joke Meters
+<div align="center">
+  <img src="assets/banner.png" alt="Nexus Banner" width="100%" />
 
-A highly customizable Discord bot (Nexus) built with `discord.py` and `sqlite3` featuring robust moderation, anti-nuke tools, a highly customizable advanced ticket system, comprehensive utility/misc commands, and dynamic "Joke Meters."
+  <br /><br />
 
-## Features
+  <img src="assets/logo.png" alt="Nexus Logo" width="150" />
 
-- **Dynamic Joke Meters:** Measures users with daily, deterministic scoring, providing fun progress bars and snarky commentary based on the results. Seed is built from their User ID, meter name, and UTC date.
-- **Roleplay Actions:** Kiss, hug, slap, or pat other users with random Giphy-powered GIFs via Slash commands.
-- **Advanced Ticket System:** Highly customizable ticket UI builder! Admins can use `/ticket-setup` to create and publish multi-button ticket panels. Each button can be customized with its own label, emoji, specific ping role, and target category. `/ticket-config` handles global fallbacks.
-- **Moderation & Automod:** Warning systems, timeout, kick, ban, purge, and an AI-less basic Automod (banned words, anti-spam, invite blocking).
-- **Anti-Nuke Systems:** Protects your server against mass bans, kicks, channel deletions, and role tampering.
-- **Comprehensive Utilities:** Over 20 hybrid utility commands (e.g., `!avatar`, `!coinflip`, `!serverinfo`, `!math`, `!poll`) plus owner-exclusive system diagnostics (`/status`, `/uptime`, `/diagnostics`, `/server-insights`).
-- **Universal Invisible UI:** All embeds are formatted with Discord's `#2B2D31` background hex using `embed_factory.py`, removing the colored left border for a clean, seamless integration into Discord's dark mode.
-- **Hybrid Command System:** Almost all commands support both standard prefixes (e.g., `!ban`) and Discord slash commands (e.g., `/ban`). Joke Actions and Joke Meters deliberately remain slash-only/prefix-hybrid as requested.
+  <h1>Nexus Bot</h1>
 
-## Prerequisites
+  <p><strong>A highly customizable, feature-rich Discord bot built with discord.py and SQLite.</strong></p>
 
-- Python 3.10+
-- A Discord Bot Token (created from the [Discord Developer Portal](https://discord.com/developers/applications)).
-- Nexus must have **Message Content**, **Server Members**, and **Presence** Intents enabled in the Developer Portal.
+  <p>
+    <img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python&logoColor=white&color=2b2d31" alt="Python" />
+    <img src="https://img.shields.io/badge/discord.py-v2.4+-blue?style=for-the-badge&logo=discord&logoColor=white&color=2b2d31" alt="discord.py" />
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue?style=for-the-badge&color=2b2d31" alt="License" /></a>
+  </p>
 
-## Setup
+  <a href="https://discord.gg/J4SHrpcKaK">
+    <img src="https://invidget.switchblade.xyz/J4SHrpcKaK" alt="Join our Discord Server" />
+  </a>
+  <br />
+  <a href="https://discord.gg/J4SHrpcKaK">
+    <img src="https://img.shields.io/badge/Discord-Join%20Support%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Server Badge" />
+  </a>
+</div>
 
-1. **Clone the repository.**
-2. **Install dependencies:**
+---
+
+## 🌟 Overview
+
+**Nexus** is an advanced Discord bot featuring an elegant, "invisible UI" aesthetic designed specifically for Discord's dark mode (`#2B2D31`). From complex ticket systems and stringent anti-nuke tools to deterministic daily joke meters and comprehensive utility commands, Nexus offers an all-in-one solution for your server's needs.
+
+## ✨ Features
+
+### 🎭 Dynamic Joke Meters
+Measure users with daily, deterministic scoring! It provides fun progress bars and snarky commentary based on the results. The random seed is uniquely generated using the target's User ID, the meter name, and the current UTC date to keep results consistent for 24 hours.
+
+### 🎟️ Advanced Ticket System
+A highly customizable, interactive ticket UI builder. Admins can use `/ticket-setup` to create and publish multi-button ticket panels. Customize each button with its own label, emoji, specific ping role, and target category.
+
+### 🛡️ Moderation & Automod
+Protect your community with robust tools:
+- Warning systems, timeout, kick, ban, and purge commands.
+- AI-less Automod for fast, reliable enforcement (banned words, anti-spam, and invite blocking).
+
+### 🛑 Anti-Nuke Systems
+Rest easy knowing your server is protected against bad actors. Nexus detects and mitigates mass bans, mass kicks, channel deletions, and unauthorized role tampering.
+
+### 🫂 Roleplay Actions
+Interact with other users using `/kiss`, `/hug`, `/slap`, or `/pat` to post dynamic Giphy-powered GIFs via Slash commands.
+
+### 🛠️ Comprehensive Utilities
+Over 20 hybrid utility commands (e.g., `!avatar`, `!coinflip`, `!serverinfo`, `!math`, `!poll`) plus owner-exclusive system diagnostics (`/status`, `/uptime`, `/diagnostics`, `/server-insights`).
+
+### 🎨 Universal Invisible UI
+All Nexus embeds use `embed_factory.py` to strip away colored borders and match Discord's `#2B2D31` dark background perfectly, achieving a seamless and modern look.
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Python 3.10+**
+- A **Discord Bot Token** from the [Discord Developer Portal](https://discord.com/developers/applications).
+- **Intents:** Nexus requires **Message Content**, **Server Members**, and **Presence** Intents to function properly.
+
+### Setup Instructions
+
+1. **Clone the Repository:**
+   ```bash
+   git clone https://github.com/yourusername/nexus.git
+   cd nexus
+   ```
+
+2. **Install Dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
-3. **Configure Environment:**
-   Copy `.env.example` to `.env` in the root directory and configure it:
+
+3. **Configure the Environment:**
+   Copy `.env.example` to `.env` (or create a new `.env` file) and fill in your credentials:
    ```env
    DISCORD_TOKEN=your_discord_bot_token_here
    COMMAND_PREFIX=!
    GIPHY_API_KEY=your_giphy_api_key_here
    OWNER_ID=your_discord_user_id_here
    ```
-4. **Run Nexus:**
+
+4. **Launch Nexus:**
    ```bash
-   python bot.py
+   python main.py
    ```
+   *Upon the first run, Nexus will automatically generate `bot_data.db` and initialize all required database tables.*
 
-Upon running for the first time, Nexus will automatically generate `bot_data.db` and initialize the required tables.
+## 📄 License
 
-## License
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for more details.
 
-This project is licensed under the GNU General Public License v3.0 (GPL-3.0) - see the [LICENSE](LICENSE) file for details.
+---
+
+<div align="center">
+  <b>Built with ❤️ by the Nexus Team.</b><br />
+  <a href="https://discord.gg/J4SHrpcKaK">Join our Discord community!</a>
+</div>
