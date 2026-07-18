@@ -2,13 +2,11 @@ import discord
 from discord.ext import commands
 import sqlite3
 import datetime
-from . import embed_factory
-
-# --- TICKET CREATION LOGIC (Used by the final published panel) ---
-
-
 import io
 import asyncio
+from . import embed_factory
+
+# --- TICKET CREATION LOGIC ---
 
 class TicketManageView(discord.ui.View):
     def __init__(self, db_conn: sqlite3.Connection):
@@ -16,10 +14,6 @@ class TicketManageView(discord.ui.View):
         self.db_conn = db_conn
 
     def check_permissions(self, interaction: discord.Interaction):
-        # Allow admins to manage, but also let the creator manage.
-        # This is a bit complex without storing creator ID properly in button clicks if they aren't admin.
-        # For simplicity, anyone with manage_channels can do this, or we can just allow anyone to click for now and check in callback.
-        # We will check manage_channels for staff actions.
         return True
 
     @discord.ui.button(label="Claim", style=discord.ButtonStyle.primary, custom_id="tm_claim_btn", emoji="👋")
@@ -28,7 +22,26 @@ class TicketManageView(discord.ui.View):
             await interaction.response.send_message("Only staff can claim tickets.", ephemeral=True)
             return
 
-        embed = embed_factory.create_clean_embed("Ticket Claimed", f"This ticket will be handled by {interaction.user.mention}.")
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT panel_id FROM tickets WHERE channel_id = ? AND status = 'open'", (interaction.channel.id,))
+        row = cursor.fetchone()
+
+        claimed_msg = "Your ticket has been claimed."
+        if row:
+            panel_id = row[0]
+            cursor.execute("SELECT claimed_message, claimed_category_id FROM ticket_panels WHERE panel_id = ?", (panel_id,))
+            p_row = cursor.fetchone()
+            if p_row:
+                if p_row[0]: claimed_msg = p_row[0]
+                if p_row[1]:
+                    try:
+                        cat = interaction.guild.get_channel(int(p_row[1]))
+                        if cat and isinstance(cat, discord.CategoryChannel):
+                            await interaction.channel.edit(category=cat)
+                    except Exception:
+                        pass
+
+        embed = embed_factory.create_clean_embed("Ticket Claimed", f"This ticket will be handled by {interaction.user.mention}.\n\n*{claimed_msg}*")
         await interaction.response.send_message(embed=embed)
 
     @discord.ui.button(label="Unclaim", style=discord.ButtonStyle.secondary, custom_id="tm_unclaim_btn", emoji="🛑")
@@ -119,7 +132,6 @@ class TicketManageView(discord.ui.View):
 
         await interaction.response.defer()
 
-        # Generate transcript
         messages = [message async for message in interaction.channel.history(limit=500, oldest_first=True)]
         transcript = ""
         for msg in messages:
@@ -128,7 +140,6 @@ class TicketManageView(discord.ui.View):
 
         file = discord.File(io.BytesIO(transcript.encode('utf-8')), filename=f"transcript_ticket_{ticket_id}.txt")
 
-        # Try to DM creator
         creator = interaction.guild.get_member(creator_id)
         if creator:
             try:
@@ -144,6 +155,7 @@ class TicketManageView(discord.ui.View):
             await interaction.channel.delete()
         except:
             pass
+
 class UserTicketModal(discord.ui.Modal, title='Open Ticket'):
     subject = discord.ui.TextInput(label='Subject', placeholder='Short description...', min_length=3, max_length=50)
     description = discord.ui.TextInput(label='Description', style=discord.TextStyle.long, min_length=10, max_length=1000)
@@ -154,53 +166,45 @@ class UserTicketModal(discord.ui.Modal, title='Open Ticket'):
         self.button_id = button_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
         cursor = self.db_conn.cursor()
-
-        # Prevent spam
-        cursor.execute("SELECT channel_id FROM tickets WHERE user_id = ? AND status = 'open'", (interaction.user.id,))
-        if cursor.fetchone():
-            await interaction.followup.send("You already have an open ticket.", ephemeral=True)
+        cursor.execute("SELECT panel_id, label, ping_role_id, category_id FROM ticket_buttons WHERE button_id = ?", (self.button_id,))
+        btn_row = cursor.fetchone()
+        if not btn_row:
+            await interaction.response.send_message("This ticket type no longer exists.", ephemeral=True)
             return
 
-        # Get button config
-        cursor.execute("SELECT label, ping_role_id, category_id FROM ticket_buttons WHERE button_id = ?", (self.button_id,))
-        btn_data = cursor.fetchone()
-        if not btn_data:
-            await interaction.followup.send("This ticket button is invalid.", ephemeral=True)
-            return
+        panel_id, label, btn_ping, btn_cat = btn_row
 
-        label, role_id, cat_id = btn_data
-        guild = interaction.guild
+        cursor.execute("SELECT initial_message, ping_role_id, created_category_id FROM ticket_panels WHERE panel_id = ?", (panel_id,))
+        panel_row = cursor.fetchone()
+        p_init_msg, p_ping, p_cat = panel_row if panel_row else ("Support will be with you shortly.", None, None)
 
-        # Fallbacks
-        cursor.execute("SELECT key, value FROM ticket_config")
-        config = dict(cursor.fetchall())
+        initial_msg = p_init_msg
 
-        category_id = cat_id or config.get("default_category")
-        ping_role_id = role_id or config.get("default_support_role")
-        initial_msg = config.get("default_initial_message", "Support will be with you shortly.")
+        role_id = btn_ping or p_ping
+        support_role = interaction.guild.get_role(int(role_id)) if role_id else None
 
-        category = guild.get_channel(int(category_id)) if category_id else None
-        support_role = guild.get_role(int(ping_role_id)) if ping_role_id else None
+        cat_id = btn_cat or p_cat
+        category = interaction.guild.get_channel(int(cat_id)) if cat_id else None
+
+        cursor.execute("INSERT INTO tickets (user_id, channel_id, status, created_at, panel_id) VALUES (?, ?, ?, ?, ?)",
+                       (interaction.user.id, 0, "open", datetime.datetime.now(datetime.timezone.utc).isoformat(), panel_id))
+        self.db_conn.commit()
+        ticket_id = cursor.lastrowid
+
+        channel_name = f"ticket-{ticket_id}"
 
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True)
         }
         if support_role:
             overwrites[support_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        cursor.execute("INSERT INTO tickets (user_id, channel_id, status, created_at) VALUES (?, 0, 'open', ?)", (interaction.user.id, now))
-        self.db_conn.commit()
-        ticket_id = cursor.lastrowid
-
-        channel_name = f"{label.lower()}-{ticket_id}"
+        await interaction.response.defer(ephemeral=True)
 
         try:
-            ticket_channel = await guild.create_text_channel(name=channel_name, category=category, overwrites=overwrites)
+            ticket_channel = await interaction.guild.create_text_channel(name=channel_name, category=category, overwrites=overwrites)
             cursor.execute("UPDATE tickets SET channel_id = ? WHERE ticket_id = ?", (ticket_channel.id, ticket_id))
             self.db_conn.commit()
 
@@ -220,24 +224,28 @@ class UserTicketModal(discord.ui.Modal, title='Open Ticket'):
             self.db_conn.commit()
             await interaction.followup.send(f"Failed to create ticket: {e}", ephemeral=True)
 
+
 class PublishedTicketButton(discord.ui.Button):
-    def __init__(self, db_conn, btn_id, label, emoji):
-        super().__init__(style=discord.ButtonStyle.secondary, label=label, emoji=emoji, custom_id=f"pub_ticket_{btn_id}")
+    def __init__(self, db_conn, btn_id, label, emoji, panel_id):
+        super().__init__(style=discord.ButtonStyle.secondary, label=label, emoji=emoji, custom_id=f"pub_ticket_{btn_id}_{panel_id}")
         self.db_conn = db_conn
         self.btn_id = btn_id
+        self.panel_id = panel_id
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(UserTicketModal(self.db_conn, self.btn_id))
 
+
 class PublishedPanelView(discord.ui.View):
-    def __init__(self, db_conn: sqlite3.Connection):
+    def __init__(self, db_conn: sqlite3.Connection, panel_id: str = "default"):
         super().__init__(timeout=None)
         self.db_conn = db_conn
+        self.panel_id = panel_id
 
         cursor = db_conn.cursor()
-        cursor.execute("SELECT button_id, label, emoji FROM ticket_buttons WHERE panel_id = 'default'")
+        cursor.execute("SELECT button_id, label, emoji FROM ticket_buttons WHERE panel_id = ?", (panel_id,))
         for btn_id, label, emoji in cursor.fetchall():
-            self.add_item(PublishedTicketButton(db_conn, btn_id, label, emoji))
+            self.add_item(PublishedTicketButton(db_conn, btn_id, label, emoji, panel_id))
 
 
 # --- TICKET BUILDER (setup-tickets) ---
@@ -256,58 +264,99 @@ class AddButtonModal(discord.ui.Modal, title="Add Ticket Type"):
         cursor = self.parent_view.db_conn.cursor()
         cursor.execute(
             "INSERT INTO ticket_buttons (panel_id, label, emoji, ping_role_id, category_id) VALUES (?, ?, ?, ?, ?)",
-            ("default", self.btn_label.value, self.btn_emoji.value or None, self.btn_role.value or None, self.btn_cat.value or None)
+            (self.parent_view.panel_id, self.btn_label.value, self.btn_emoji.value or None, self.btn_role.value or None, self.btn_cat.value or None)
         )
         self.parent_view.db_conn.commit()
         await self.parent_view.refresh(interaction)
 
+class EditButtonModal(discord.ui.Modal, title="Edit Ticket Type"):
+    btn_label = discord.ui.TextInput(label="Button Label (e.g. Support)", max_length=30)
+    btn_emoji = discord.ui.TextInput(label="Emoji (Optional)", required=False, max_length=10)
+    btn_role = discord.ui.TextInput(label="Specific Ping Role ID (Optional)", required=False)
+    btn_cat = discord.ui.TextInput(label="Specific Category ID (Optional)", required=False)
+
+    def __init__(self, parent_view, button_id, current_data):
+        super().__init__()
+        self.parent_view = parent_view
+        self.button_id = button_id
+
+        self.btn_label.default = current_data[0]
+        self.btn_emoji.default = current_data[1] or ""
+        self.btn_role.default = current_data[2] or ""
+        self.btn_cat.default = current_data[3] or ""
+
+    async def on_submit(self, interaction: discord.Interaction):
+        cursor = self.parent_view.db_conn.cursor()
+        cursor.execute(
+            "UPDATE ticket_buttons SET label=?, emoji=?, ping_role_id=?, category_id=? WHERE button_id=?",
+            (self.btn_label.value, self.btn_emoji.value or None, self.btn_role.value or None, self.btn_cat.value or None, self.button_id)
+        )
+        self.parent_view.db_conn.commit()
+        await self.parent_view.refresh(interaction)
+
+class BuilderButtonActionSelect(discord.ui.Select):
+    def __init__(self, parent_view, options, action_type):
+        self.parent_view = parent_view
+        self.action_type = action_type
+        super().__init__(placeholder=f"Select a button to {action_type}...", options=options, custom_id=f"sel_{action_type}_{parent_view.panel_id}")
+
+    async def callback(self, interaction: discord.Interaction):
+        btn_id = self.values[0]
+        if self.action_type == "delete":
+            cursor = self.parent_view.db_conn.cursor()
+            cursor.execute("DELETE FROM ticket_buttons WHERE button_id = ?", (btn_id,))
+            self.parent_view.db_conn.commit()
+            await self.parent_view.refresh(interaction)
+        elif self.action_type == "edit":
+            cursor = self.parent_view.db_conn.cursor()
+            cursor.execute("SELECT label, emoji, ping_role_id, category_id FROM ticket_buttons WHERE button_id = ?", (btn_id,))
+            row = cursor.fetchone()
+            if row:
+                await interaction.response.send_modal(EditButtonModal(self.parent_view, btn_id, row))
+
 class EditPanelTextModal(discord.ui.Modal, title="Edit Panel Text"):
-    p_title = discord.ui.TextInput(label="Title", default="Support Tickets")
-    p_desc = discord.ui.TextInput(label="Description", style=discord.TextStyle.long, default="Select a category below.")
+    p_title = discord.ui.TextInput(label="Title")
+    p_desc = discord.ui.TextInput(label="Description", style=discord.TextStyle.long)
 
     def __init__(self, parent_view):
         super().__init__()
         self.parent_view = parent_view
 
+        cursor = self.parent_view.db_conn.cursor()
+        cursor.execute("SELECT title, description FROM ticket_panels WHERE panel_id = ?", (self.parent_view.panel_id,))
+        row = cursor.fetchone()
+        self.p_title.default = row[0] if row else "Support Tickets"
+        self.p_desc.default = row[1] if row else "Select a category below."
+
     async def on_submit(self, interaction: discord.Interaction):
         cursor = self.parent_view.db_conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO ticket_config (key, value) VALUES ('panel_title', ?)", (self.p_title.value,))
-        cursor.execute("INSERT OR REPLACE INTO ticket_config (key, value) VALUES ('panel_desc', ?)", (self.p_desc.value,))
+        cursor.execute("UPDATE ticket_panels SET title=?, description=? WHERE panel_id=?",
+                       (self.p_title.value, self.p_desc.value, self.parent_view.panel_id))
         self.parent_view.db_conn.commit()
         await self.parent_view.refresh(interaction)
 
-class BuilderButtonDeleteSelect(discord.ui.Select):
-    def __init__(self, parent_view, options):
-        self.parent_view = parent_view
-        super().__init__(placeholder="Select a button to delete...", options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        btn_id = self.values[0]
-        cursor = self.parent_view.db_conn.cursor()
-        cursor.execute("DELETE FROM ticket_buttons WHERE button_id = ?", (btn_id,))
-        self.parent_view.db_conn.commit()
-        await self.parent_view.refresh(interaction)
 
 class TicketBuilderView(discord.ui.View):
-    def __init__(self, db_conn: sqlite3.Connection):
+    def __init__(self, db_conn: sqlite3.Connection, panel_id: str):
         super().__init__(timeout=600)
         self.db_conn = db_conn
+        self.panel_id = panel_id
 
     def build_preview_embed(self):
         cursor = self.db_conn.cursor()
-        cursor.execute("SELECT key, value FROM ticket_config")
-        config = dict(cursor.fetchall())
-        title = config.get("panel_title", "Support Tickets")
-        desc = config.get("panel_desc", "Select a category below.")
+        cursor.execute("SELECT title, description FROM ticket_panels WHERE panel_id = ?", (self.panel_id,))
+        row = cursor.fetchone()
+        title = row[0] if row else f"{self.panel_id.title()} Tickets"
+        desc = row[1] if row else "Select a category below."
 
         embed = embed_factory.create_clean_embed(f"[PREVIEW] {title}", desc)
 
-        cursor.execute("SELECT button_id, label, emoji, ping_role_id, category_id FROM ticket_buttons WHERE panel_id = 'default'")
+        cursor.execute("SELECT button_id, label, emoji, ping_role_id, category_id FROM ticket_buttons WHERE panel_id = ?", (self.panel_id,))
         btns = cursor.fetchall()
         if btns:
             info = ""
             for b_id, lbl, emj, r_id, c_id in btns:
-                info += f"• {emj or ''} **{lbl}** (Role: {r_id or 'Default'}, Cat: {c_id or 'Default'})\n"
+                info += f"• {emj or ''} **{lbl}** (Role: {r_id or 'Panel Default'}, Cat: {c_id or 'Panel Default'})\n"
             embed.add_field(name="Configured Buttons", value=info, inline=False)
         else:
             embed.add_field(name="Configured Buttons", value="None yet. Click 'Add Button'.", inline=False)
@@ -318,17 +367,18 @@ class TicketBuilderView(discord.ui.View):
         self.clear_items()
 
         # Add core builder buttons
-        self.add_item(discord.ui.Button(label="Edit Text", style=discord.ButtonStyle.primary, custom_id="tb_edit_text"))
-        self.add_item(discord.ui.Button(label="Add Button", style=discord.ButtonStyle.success, custom_id="tb_add_btn"))
-        self.add_item(discord.ui.Button(label="Publish Panel", style=discord.ButtonStyle.danger, custom_id="tb_publish"))
+        self.add_item(discord.ui.Button(label="Edit Panel Text", style=discord.ButtonStyle.primary, custom_id=f"tb_edit_text_{self.panel_id}"))
+        self.add_item(discord.ui.Button(label="Add Button", style=discord.ButtonStyle.success, custom_id=f"tb_add_btn_{self.panel_id}"))
+        self.add_item(discord.ui.Button(label="Publish Panel", style=discord.ButtonStyle.danger, custom_id=f"tb_publish_{self.panel_id}"))
 
-        # Add delete dropdown if there are buttons
         cursor = self.db_conn.cursor()
-        cursor.execute("SELECT button_id, label FROM ticket_buttons WHERE panel_id = 'default'")
+        cursor.execute("SELECT button_id, label FROM ticket_buttons WHERE panel_id = ?", (self.panel_id,))
         btns = cursor.fetchall()
         if btns:
-            opts = [discord.SelectOption(label=f"Delete: {lbl}", value=str(b_id)) for b_id, lbl in btns[:25]]
-            self.add_item(BuilderButtonDeleteSelect(self, opts))
+            opts_del = [discord.SelectOption(label=f"Delete: {lbl}", value=str(b_id)) for b_id, lbl in btns[:25]]
+            opts_edit = [discord.SelectOption(label=f"Edit: {lbl}", value=str(b_id)) for b_id, lbl in btns[:25]]
+            self.add_item(BuilderButtonActionSelect(self, opts_edit, "edit"))
+            self.add_item(BuilderButtonActionSelect(self, opts_del, "delete"))
 
         embed = self.build_preview_embed()
 
@@ -338,59 +388,82 @@ class TicketBuilderView(discord.ui.View):
             await interaction.edit_original_response(embed=embed, view=self)
 
     async def interaction_check(self, interaction: discord.Interaction):
-        if interaction.data.get("custom_id") == "tb_edit_text":
+        custom_id = interaction.data.get("custom_id", "")
+        if custom_id.startswith("tb_edit_text_"):
             await interaction.response.send_modal(EditPanelTextModal(self))
             return False
-        elif interaction.data.get("custom_id") == "tb_add_btn":
+        elif custom_id.startswith("tb_add_btn_"):
             await interaction.response.send_modal(AddButtonModal(self))
             return False
-        elif interaction.data.get("custom_id") == "tb_publish":
+        elif custom_id.startswith("tb_publish_"):
             cursor = self.db_conn.cursor()
-            cursor.execute("SELECT key, value FROM ticket_config")
-            config = dict(cursor.fetchall())
-            embed = embed_factory.create_clean_embed(config.get("panel_title", "Support Tickets"), config.get("panel_desc", "Select a category below."))
-            view = PublishedPanelView(self.db_conn)
+            cursor.execute("SELECT title, description FROM ticket_panels WHERE panel_id = ?", (self.panel_id,))
+            row = cursor.fetchone()
+            title = row[0] if row else "Support Tickets"
+            desc = row[1] if row else "Select a category below."
+            embed = embed_factory.create_clean_embed(title, desc)
+            view = PublishedPanelView(self.db_conn, self.panel_id)
             await interaction.channel.send(embed=embed, view=view)
-            await interaction.response.send_message("Panel published!", ephemeral=True)
+            await interaction.response.send_message("Panel published to this channel!", ephemeral=True)
             return False
         return True
 
 
-# --- TICKET CONFIG (ticket-config) ---
+# --- PANEL CONFIG (/ticket-config) ---
 
-class GlobalConfigModal(discord.ui.Modal, title="Edit Ticket Config"):
-    def __init__(self, db_conn, key, current_val):
+class PanelConfigModal(discord.ui.Modal, title="Edit Panel Config"):
+    def __init__(self, db_conn, panel_id, key, current_val):
         super().__init__()
         self.db_conn = db_conn
+        self.panel_id = panel_id
         self.key = key
         self.val_input = discord.ui.TextInput(label="New Value (ID or Text)", default=current_val, style=discord.TextStyle.long if "message" in key else discord.TextStyle.short)
         self.add_item(self.val_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         cursor = self.db_conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO ticket_config (key, value) VALUES (?, ?)", (self.key, self.val_input.value))
+        cursor.execute(f"UPDATE ticket_panels SET {self.key} = ? WHERE panel_id = ?", (self.val_input.value, self.panel_id))
         self.db_conn.commit()
-        await interaction.response.send_message("Saved! Run `/ticket-config` again to see changes.", ephemeral=True)
+        await interaction.response.send_message(f"Saved! Run `/ticket-config {self.panel_id}` again to see changes.", ephemeral=True)
 
-class GlobalConfigDropdown(discord.ui.Select):
-    def __init__(self, db_conn):
+class PanelConfigDropdown(discord.ui.Select):
+    def __init__(self, db_conn, panel_id):
         self.db_conn = db_conn
+        self.panel_id = panel_id
         opts = [
-            discord.SelectOption(label="Default Initial Message", value="default_initial_message", description="Message sent when a ticket opens"),
-            discord.SelectOption(label="Default Support Role ID", value="default_support_role", description="Role ID pinged automatically"),
-            discord.SelectOption(label="Default Category ID", value="default_category", description="Category ID where tickets spawn")
+            discord.SelectOption(label="Initial Message", value="initial_message", description="Message sent when ticket opens"),
+            discord.SelectOption(label="Claimed Message", value="claimed_message", description="Message appended when claimed"),
+            discord.SelectOption(label="Ping Role ID", value="ping_role_id", description="Role ID pinged automatically"),
+            discord.SelectOption(label="Created Category ID", value="created_category_id", description="Where new tickets spawn"),
+            discord.SelectOption(label="Claimed Category ID", value="claimed_category_id", description="Where claimed tickets move")
         ]
-        super().__init__(placeholder="Select a global setting...", options=opts)
+        super().__init__(placeholder="Select a setting to edit...", options=opts)
 
     async def callback(self, interaction: discord.Interaction):
         key = self.values[0]
         cursor = self.db_conn.cursor()
-        cursor.execute("SELECT value FROM ticket_config WHERE key = ?", (key,))
+        cursor.execute(f"SELECT {key} FROM ticket_panels WHERE panel_id = ?", (self.panel_id,))
         row = cursor.fetchone()
-        current_val = row[0] if row else ""
-        await interaction.response.send_modal(GlobalConfigModal(self.db_conn, key, current_val))
+        current_val = row[0] if row and row[0] else ""
+        await interaction.response.send_modal(PanelConfigModal(self.db_conn, self.panel_id, key, current_val))
 
-class GlobalConfigView(discord.ui.View):
-    def __init__(self, db_conn):
+class PanelConfigView(discord.ui.View):
+    def __init__(self, db_conn, panel_id):
         super().__init__(timeout=600)
-        self.add_item(GlobalConfigDropdown(db_conn))
+        self.db_conn = db_conn
+        self.panel_id = panel_id
+        self.add_item(PanelConfigDropdown(db_conn, panel_id))
+        self.add_item(discord.ui.Button(label="Delete Entire Panel", style=discord.ButtonStyle.danger, custom_id=f"del_panel_{panel_id}"))
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        custom_id = interaction.data.get("custom_id", "")
+        if custom_id.startswith("del_panel_"):
+            cursor = self.db_conn.cursor()
+            cursor.execute("DELETE FROM ticket_panels WHERE panel_id = ?", (self.panel_id,))
+            cursor.execute("DELETE FROM ticket_buttons WHERE panel_id = ?", (self.panel_id,))
+            self.db_conn.commit()
+            await interaction.response.send_message(f"Panel `{self.panel_id}` and all its buttons have been deleted.", ephemeral=True)
+            self.clear_items()
+            await interaction.edit_original_response(view=self)
+            return False
+        return True

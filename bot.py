@@ -56,20 +56,27 @@ def init_db():
     conn.commit()
 
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tickets (
-            ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            channel_id INTEGER,
-            status TEXT,
-            created_at TEXT
+        CREATE TABLE IF NOT EXISTS ticket_panels (
+            panel_id TEXT PRIMARY KEY,
+            title TEXT,
+            description TEXT,
+            initial_message TEXT,
+            claimed_message TEXT,
+            ping_role_id TEXT,
+            created_category_id TEXT,
+            claimed_category_id TEXT
         )
     ''')
     conn.commit()
 
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS ticket_config (
-            key TEXT PRIMARY KEY,
-            value TEXT
+        CREATE TABLE IF NOT EXISTS tickets (
+            ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            channel_id INTEGER,
+            status TEXT,
+            created_at TEXT,
+            panel_id TEXT
         )
     ''')
     conn.commit()
