@@ -28,13 +28,21 @@ def get_db():
 
 async def is_authorized():
     try:
+        # Fallback to bot owner ID
+        user = await discord_auth.fetch_user()
+        if str(user.id) == os.getenv("OWNER_ID"):
+            return True
+
         user_guilds = await discord_auth.fetch_guilds()
         bot_guild_ids = [g.id for g in app.bot.guilds]
         for g in user_guilds:
-            if g.id in bot_guild_ids and (g.permissions & 0x8) == 0x8:
+            # quart-discord returns a discord.Permissions object for g.permissions
+            if g.id in bot_guild_ids and getattr(g.permissions, 'administrator', False):
                 return True
+
         return False
-    except:
+    except Exception as e:
+        print(f"Auth error: {e}")
         return False
 
 @app.route("/")
