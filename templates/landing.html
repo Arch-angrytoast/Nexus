@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="w-full bg-[#2B2D31] text-white flex flex-col items-center">
+    <!-- Navigation -->
+    <nav class="w-full max-w-6xl p-6 flex justify-between items-center border-b border-white/10">
+    <div class="flex items-center gap-3">
+        <img src="/assets/website_logo.png" alt="Nexus Logo" class="w-12 h-12 object-cover rounded-xl" />
+        <span class="text-2xl font-bold tracking-wider">Project Nexus</span>
+    </div>
+    <div>
+        {% if user %}
+        <div class="flex items-center gap-4">
+            <span class="hidden sm:block opacity-75">Welcome, {{ user.name }}</span>
+            <a href="/dashboard" class="bg-[#5865F2] hover:bg-[#4752C4] px-6 py-2 rounded-lg font-medium transition-colors">
+            Dashboard
+            </a>
+            <a href="/logout" class="opacity-50 hover:opacity-100 text-sm">Logout</a>
+        </div>
+        {% else %}
+        <a href="/login" class="bg-[#5865F2] hover:bg-[#4752C4] px-6 py-2 rounded-lg font-medium transition-colors">
+            Login with Discord
+        </a>
+        {% endif %}
+    </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <main class="flex-1 w-full max-w-6xl p-6 flex flex-col items-center justify-center text-center gap-8 mt-12">
+    <img src="/assets/website_logo.png" alt="Nexus Bot" class="w-48 h-48 drop-shadow-2xl mb-4 rounded-xl" />
+
+    <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight">
+        Next-Gen Server <span class="text-[#5865F2]">Management</span>
+    </h1>
+
+    <p class="text-xl opacity-70 max-w-2xl leading-relaxed">
+        The ultimate, modular Discord bot built exclusively for the Nexus community. Featuring advanced anti-nuke, dynamic leveling, and custom ticket systems.
+    </p>
+
+    <div class="flex gap-4 mt-4">
+        {% if not user %}
+        <a href="/login" class="bg-[#5865F2] hover:bg-[#4752C4] px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-[#5865F2]/20 transition-all hover:scale-105">
+        Get Started
+        </a>
+        {% endif %}
+        <a href="https://discord.gg/J4SHrpcKaK" target="_blank" rel="noreferrer" class="bg-white/5 hover:bg-white/10 px-8 py-3 rounded-xl font-bold text-lg border border-white/10 transition-all hover:scale-105">
+        Join Support Server
+        </a>
+    </div>
+
+    <!-- Feature Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-24 text-left">
+        <div class="bg-white/5 border border-white/10 p-6 rounded-2xl">
+        <i data-lucide="shield-alert" class="w-10 h-10 text-[#5865F2] mb-4"></i>
+        <h3 class="text-xl font-bold mb-2">Absolute Security</h3>
+        <p class="opacity-70 text-sm">Military-grade anti-nuke protection. Mitigates mass bans, mass channel deletions, and role tampering instantly.</p>
+        </div>
+
+        <div class="bg-white/5 border border-white/10 p-6 rounded-2xl">
+        <i data-lucide="sparkles" class="w-10 h-10 text-[#5865F2] mb-4"></i>
+        <h3 class="text-xl font-bold mb-2">Role Rewards</h3>
+        <p class="opacity-70 text-sm">A fully integrated leveling system that rewards active community members with customizable roles.</p>
+        </div>
+
+        <div class="bg-white/5 border border-white/10 p-6 rounded-2xl">
+        <i data-lucide="activity" class="w-10 h-10 text-[#5865F2] mb-4"></i>
+        <h3 class="text-xl font-bold mb-2">Joke Meters</h3>
+        <p class="opacity-70 text-sm">Test the vibes! Daily, deterministic joke meters measure members to see what kind of energy they radiate today.</p>
+        </div>
+    </div>
+    </main>
+
+    <footer class="w-full p-6 text-center opacity-50 border-t border-white/5 mt-12">
+    <p>Made by 𝙰𝚗𝚐𝚛𝚢𝚝𝚘𝚊𝚜𝚝 • Still in development</p>
+    </footer>
+</div>
+{% endblock %}

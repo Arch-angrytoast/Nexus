@@ -113,6 +113,10 @@ class NexusBot(commands.Bot):
         self.db_conn = init_db()
 
     async def setup_hook(self):
+        # Start Quart Web Server in the background loop
+        import webserver
+        self.loop.create_task(webserver.run_server(self))
+
         # Load the core commands cog
         await self.load_extension("cogs.core_commands")
         await self.load_extension("cogs.moderation")
@@ -123,6 +127,7 @@ class NexusBot(commands.Bot):
         await self.load_extension("cogs.tickets")
         await self.load_extension("cogs.utility")
         await self.load_extension("cogs.misc")
+        await self.load_extension("cogs.leveling")
 
         try:
             synced = await self.tree.sync()
