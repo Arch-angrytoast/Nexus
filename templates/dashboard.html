@@ -133,17 +133,42 @@
         <div class="bg-black/20 border border-white/5 p-6 rounded-2xl">
            <h3 class="text-xl font-bold mb-4">Settings</h3>
            <form method="POST" action="/dashboard/leveling_settings" class="space-y-4">
-              <div>
-                <label class="block text-sm opacity-70 mb-1">XP Per Message (Min - Max)</label>
-                <div class="flex gap-2">
-                  <input type="number" name="xp_min" value="{{ config.xp_min }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
-                  <span class="py-2">-</span>
-                  <input type="number" name="xp_max" value="{{ config.xp_max }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm opacity-70 mb-1">XP Per Message (Min - Max)</label>
+                  <div class="flex gap-2">
+                    <input type="number" name="xp_min" value="{{ config.xp_min }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
+                    <span class="py-2">-</span>
+                    <input type="number" name="xp_max" value="{{ config.xp_max }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-sm opacity-70 mb-1">Cooldown (Seconds)</label>
+                  <input type="number" name="xp_cooldown" value="{{ config.xp_cooldown }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
                 </div>
               </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm opacity-70 mb-1">Min Message Length</label>
+                  <input type="number" name="leveling_min_length" value="{{ config.leveling_min_length }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
+                </div>
+                <div>
+                  <label class="block text-sm opacity-70 mb-1">Role Stacking Behavior</label>
+                  <select name="leveling_role_stacking" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white">
+                      <option value="stack" {% if config.leveling_role_stacking == 'stack' %}selected{% endif %}>Stack (Keep Old Roles)</option>
+                      <option value="replace" {% if config.leveling_role_stacking == 'replace' %}selected{% endif %}>Replace (Remove Old Roles)</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label class="block text-sm opacity-70 mb-1">Cooldown (Seconds)</label>
-                <input type="number" name="xp_cooldown" value="{{ config.xp_cooldown }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
+                <label class="block text-sm opacity-70 mb-1">Level-Up Announcement Channel</label>
+                <input type="text" name="leveling_announcement_channel" placeholder="'current', 'dm', or Channel ID" value="{{ config.leveling_announcement_channel }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white placeholder-white/30" />
+              </div>
+              <div>
+                <label class="block text-sm opacity-70 mb-1">Custom Level-Up Message (Use {user}, {level}, {role})</label>
+                <input type="text" name="leveling_custom_message" value="{{ config.leveling_custom_message }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
               </div>
 
               <div>
@@ -153,9 +178,10 @@
               </div>
 
               <div>
-                <label class="block text-sm opacity-70 mb-1">Blacklisted Channels (IDs, comma-separated)</label>
-                <input type="text" name="leveling_blacklist" placeholder="e.g. 111111111,222222222" value="{{ config.leveling_blacklist }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white placeholder-white/30" />
-                <p class="text-xs opacity-50 mt-1">If set, these channels will NOT grant XP.</p>
+                <label class="block text-sm opacity-70 mb-1">Blacklisted Channels & Roles (IDs, comma-separated)</label>
+                <input type="text" name="leveling_blacklist" placeholder="Channels e.g. 11111" value="{{ config.leveling_blacklist }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white placeholder-white/30 mb-2" />
+                <input type="text" name="leveling_role_blacklist" placeholder="Roles e.g. 22222" value="{{ config.leveling_role_blacklist }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white placeholder-white/30" />
+                <p class="text-xs opacity-50 mt-1">Users in these channels, or with these roles, will NOT grant XP.</p>
               </div>
 
               <button type="submit" class="bg-[#5865F2] hover:bg-[#4752C4] w-full py-2 rounded-lg font-bold transition mt-2">
@@ -164,9 +190,10 @@
            </form>
         </div>
 
-        <!-- Role Rewards -->
-        <div class="bg-black/20 border border-white/5 p-6 rounded-2xl flex flex-col">
-          <h3 class="text-xl font-bold mb-4">Role Rewards</h3>
+        <div class="flex flex-col gap-8">
+          <!-- Role Rewards -->
+          <div class="bg-black/20 border border-white/5 p-6 rounded-2xl flex flex-col flex-1">
+            <h3 class="text-xl font-bold mb-4">Role Rewards</h3>
 
           <div class="flex-1">
             {% if rewards|length == 0 %}
@@ -199,7 +226,47 @@
                </button>
             </form>
           </div>
+          </div>
+
+          <!-- Role Multipliers -->
+          <div class="bg-black/20 border border-white/5 p-6 rounded-2xl flex flex-col flex-1">
+            <h3 class="text-xl font-bold mb-4">Role Multipliers</h3>
+            <p class="text-sm opacity-60 mb-4">Users with these roles will earn multiplied XP.</p>
+
+            <div class="flex-1">
+              {% if multipliers|length == 0 %}
+                <div class="opacity-50 text-sm mb-4">No role multipliers configured.</div>
+              {% else %}
+                <div class="space-y-2 mb-6">
+                  {% for m in multipliers %}
+                    <div class="flex justify-between items-center bg-black/40 px-4 py-2 rounded border border-white/5">
+                      <span class="font-semibold">{{ m.multiplier }}x XP</span>
+                      <div class="flex items-center gap-4">
+                        <span class="opacity-70 text-sm">Role ID: {{ m.role_id }}</span>
+                        <form method="POST" action="/dashboard/leveling_multiplier_delete" class="inline">
+                            <input type="hidden" name="role_id" value="{{ m.role_id }}" />
+                            <button type="submit" class="text-red-400 hover:text-red-300 font-medium">Remove</button>
+                        </form>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="pt-4 border-t border-white/10 mt-auto">
+              <h4 class="text-sm font-semibold mb-2">Add New Multiplier</h4>
+              <form method="POST" action="/dashboard/leveling_multiplier_add" class="flex gap-2">
+                 <input type="text" name="role_id" placeholder="Role ID" required class="bg-black/40 border border-white/10 rounded px-3 py-2 flex-1 text-white" />
+                 <input type="number" step="0.1" name="multiplier" placeholder="e.g. 1.5" required class="bg-black/40 border border-white/10 rounded px-3 py-2 w-24 text-white" />
+                 <button type="submit" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg font-medium transition border border-white/10">
+                   Add
+                 </button>
+              </form>
+            </div>
+          </div>
         </div>
+
       </div>
     </div>
     {% endif %}

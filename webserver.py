@@ -135,11 +135,23 @@ async def dashboard_leveling():
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM server_config WHERE key IN ('xp_min', 'xp_max', 'xp_cooldown', 'leveling_whitelist', 'leveling_blacklist')")
+    keys = [
+        'xp_min', 'xp_max', 'xp_cooldown', 'leveling_whitelist', 'leveling_blacklist',
+        'leveling_role_blacklist', 'leveling_min_length', 'leveling_announcement_channel',
+        'leveling_custom_message', 'leveling_role_stacking'
+    ]
+    cursor.execute(f"SELECT * FROM server_config WHERE key IN ({','.join(['?']*len(keys))})", keys)
     rows = cursor.fetchall()
-    config = {"xp_min": 15, "xp_max": 25, "xp_cooldown": 60, "leveling_whitelist": "", "leveling_blacklist": ""}
+
+    # Defaults
+    config = {
+        "xp_min": 15, "xp_max": 25, "xp_cooldown": 60, "leveling_whitelist": "", "leveling_blacklist": "",
+        "leveling_role_blacklist": "", "leveling_min_length": 5, "leveling_announcement_channel": "current",
+        "leveling_custom_message": "🎉 **{user}** just leveled up to **Level {level}**!", "leveling_role_stacking": "stack"
+    }
+
     for r in rows:
-        if r['key'] in ['xp_min', 'xp_max', 'xp_cooldown']:
+        if r['key'] in ['xp_min', 'xp_max', 'xp_cooldown', 'leveling_min_length']:
             config[r['key']] = int(r['value'])
         else:
             config[r['key']] = str(r['value'])
@@ -147,7 +159,10 @@ async def dashboard_leveling():
     cursor.execute("SELECT level, role_id FROM leveling_rewards ORDER BY level ASC")
     rewards = cursor.fetchall()
 
-    return await render_template('dashboard.html', tab='leveling', user=user, config=config, rewards=rewards)
+    cursor.execute("SELECT role_id, multiplier FROM leveling_multipliers")
+    multipliers = cursor.fetchall()
+
+    return await render_template('dashboard.html', tab='leveling', user=user, config=config, rewards=rewards, multipliers=multipliers)
 
 
 @app.route("/dashboard/leveling_settings", methods=["POST"])
@@ -160,10 +175,50 @@ async def dashboard_leveling_settings():
     conn = get_db()
     cursor = conn.cursor()
 
-    for k in ['xp_min', 'xp_max', 'xp_cooldown', 'leveling_whitelist', 'leveling_blacklist']:
+    keys = [
+        'xp_min', 'xp_max', 'xp_cooldown', 'leveling_whitelist', 'leveling_blacklist',
+        'leveling_role_blacklist', 'leveling_min_length', 'leveling_announcement_channel',
+        'leveling_custom_message', 'leveling_role_stacking'
+    ]
+    for k in keys:
         if k in form:
             cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (k, form[k]))
     conn.commit()
+    return redirect(url_for("dashboard_leveling"))
+
+@app.route("/dashboard/leveling_multiplier_add", methods=["POST"])
+@requires_authorization
+async def dashboard_leveling_multiplier_add():
+    if not await is_authorized():
+        return "Unauthorized", 403
+
+    form = await request.form
+    role_id = form.get('role_id')
+    multiplier = form.get('multiplier')
+
+    if role_id and multiplier:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO leveling_multipliers (role_id, multiplier) VALUES (?, ?)", (str(role_id), float(multiplier)))
+        conn.commit()
+
+    return redirect(url_for("dashboard_leveling"))
+
+@app.route("/dashboard/leveling_multiplier_delete", methods=["POST"])
+@requires_authorization
+async def dashboard_leveling_multiplier_delete():
+    if not await is_authorized():
+        return "Unauthorized", 403
+
+    form = await request.form
+    role_id = form.get('role_id')
+
+    if role_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM leveling_multipliers WHERE role_id = ?", (str(role_id),))
+        conn.commit()
+
     return redirect(url_for("dashboard_leveling"))
 
 
