@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="w-full bg-[#2B2D31] text-white flex flex-col items-center">
+<div class="w-full text-white flex flex-col items-center relative z-10">
     <!-- Navigation -->
-    <nav class="w-full max-w-6xl p-6 flex justify-between items-center border-b border-white/10">
+    <nav class="w-full max-w-6xl p-6 flex justify-between items-center border-b border-white/5">
     <div class="flex items-center gap-3">
         <img src="/assets/website_logo.png" alt="Nexus Logo" class="w-12 h-12 object-cover rounded-xl" />
         <span class="text-2xl font-bold tracking-wider">Project Nexus</span>
@@ -49,23 +49,23 @@
     </div>
 
     <!-- Feature Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-24 text-left">
-        <div class="bg-white/5 border border-white/10 p-6 rounded-2xl">
-        <i data-lucide="shield-alert" class="w-10 h-10 text-[#5865F2] mb-4"></i>
-        <h3 class="text-xl font-bold mb-2">Absolute Security</h3>
-        <p class="opacity-70 text-sm">Military-grade anti-nuke protection. Mitigates mass bans, mass channel deletions, and role tampering instantly.</p>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-24 text-left px-4">
+        <div class="glass-panel p-6 rounded-3xl transition duration-300 hover:-translate-y-2 hover:bg-white/10 group">
+        <i data-lucide="shield-alert" class="w-12 h-12 text-[#5865F2] mb-6 group-hover:scale-110 transition"></i>
+        <h3 class="text-2xl font-bold mb-3">Absolute Security</h3>
+        <p class="opacity-70 leading-relaxed">Military-grade anti-nuke protection. Mitigates mass bans, mass channel deletions, and role tampering instantly.</p>
         </div>
 
-        <div class="bg-white/5 border border-white/10 p-6 rounded-2xl">
-        <i data-lucide="sparkles" class="w-10 h-10 text-[#5865F2] mb-4"></i>
-        <h3 class="text-xl font-bold mb-2">Role Rewards</h3>
-        <p class="opacity-70 text-sm">A fully integrated leveling system that rewards active community members with customizable roles.</p>
+        <div class="glass-panel p-6 rounded-3xl transition duration-300 hover:-translate-y-2 hover:bg-white/10 group">
+        <i data-lucide="sparkles" class="w-12 h-12 text-[#5865F2] mb-6 group-hover:scale-110 transition"></i>
+        <h3 class="text-2xl font-bold mb-3">Role Rewards</h3>
+        <p class="opacity-70 leading-relaxed">A fully integrated leveling system that rewards active community members with customizable roles.</p>
         </div>
 
-        <div class="bg-white/5 border border-white/10 p-6 rounded-2xl">
-        <i data-lucide="activity" class="w-10 h-10 text-[#5865F2] mb-4"></i>
-        <h3 class="text-xl font-bold mb-2">Joke Meters</h3>
-        <p class="opacity-70 text-sm">Test the vibes! Daily, deterministic joke meters measure members to see what kind of energy they radiate today.</p>
+        <div class="glass-panel p-6 rounded-3xl transition duration-300 hover:-translate-y-2 hover:bg-white/10 group">
+        <i data-lucide="activity" class="w-12 h-12 text-[#5865F2] mb-6 group-hover:scale-110 transition"></i>
+        <h3 class="text-2xl font-bold mb-3">Joke Meters</h3>
+        <p class="opacity-70 leading-relaxed">Test the vibes! Daily, deterministic joke meters measure members to see what kind of energy they radiate today.</p>
         </div>
     </div>
     </main>

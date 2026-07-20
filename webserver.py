@@ -170,7 +170,21 @@ async def dashboard_leveling():
     cursor.execute("SELECT role_id, multiplier FROM leveling_multipliers")
     multipliers = cursor.fetchall()
 
-    return await render_template('dashboard.html', tab='leveling', user=user, config=config, rewards=rewards, multipliers=multipliers)
+    # Fetch roles and channels from the bot
+    roles = []
+    channels = []
+    if hasattr(app, 'bot') and app.bot.is_ready() and app.bot.guilds:
+        guild = app.bot.guilds[0] # Assuming single-server project "Project Nexus"
+        roles = [{"id": str(r.id), "name": r.name} for r in guild.roles if not r.is_default()]
+        channels = [{"id": str(c.id), "name": c.name} for c in guild.text_channels + guild.voice_channels]
+
+    # Helper function to check if an id is in a comma separated string
+    def is_selected(id_str, csv_str):
+        return id_str in [x.strip() for x in csv_str.split(',') if x.strip()]
+
+    return await render_template('dashboard.html', tab='leveling', user=user, config=config,
+                                 rewards=rewards, multipliers=multipliers,
+                                 roles=roles, channels=channels, is_selected=is_selected)
 
 
 @app.route("/dashboard/leveling_settings", methods=["POST"])
@@ -183,14 +197,20 @@ async def dashboard_leveling_settings():
     conn = get_db()
     cursor = conn.cursor()
 
-    keys = [
-        'xp_min', 'xp_max', 'xp_cooldown', 'leveling_whitelist', 'leveling_blacklist',
-        'leveling_role_blacklist', 'leveling_min_length', 'leveling_announcement_channel',
-        'leveling_custom_message', 'leveling_role_stacking'
-    ]
-    for k in keys:
+    # Handle standard inputs
+    standard_keys = ['xp_min', 'xp_max', 'xp_cooldown', 'leveling_min_length', 'leveling_announcement_channel', 'leveling_custom_message', 'leveling_role_stacking']
+    for k in standard_keys:
         if k in form:
             cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (k, form[k]))
+
+    # Handle multi-selects (Choices.js)
+    multi_keys = ['leveling_whitelist', 'leveling_blacklist', 'leveling_role_blacklist']
+    for k in multi_keys:
+        values = form.getlist(k)
+        # Combine into comma separated string
+        csv_value = ",".join(values)
+        cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (k, csv_value))
+
     conn.commit()
     return redirect(url_for("dashboard_leveling"))
 
