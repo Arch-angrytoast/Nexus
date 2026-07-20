@@ -1,77 +1,144 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="w-full text-white flex flex-col items-center relative z-10">
-    <!-- Navigation -->
-    <nav class="w-full max-w-6xl p-6 flex justify-between items-center border-b border-white/5">
-    <div class="flex items-center gap-3">
-        <img src="/assets/website_logo.png" alt="Nexus Logo" class="w-12 h-12 object-cover rounded-xl" />
-        <span class="text-2xl font-bold tracking-wider">Project Nexus</span>
-    </div>
-    <div>
-        {% if user %}
+<style>
+    /* Sleek Dark Theme Overrides */
+    body {
+        background-color: #050505;
+        color: #f0f0f0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* Animated Gradient "Silk" Background */
+    .hero-bg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        background: radial-gradient(circle at 50% 50%, rgba(20, 10, 40, 0.8) 0%, rgba(5, 5, 5, 1) 60%);
+        overflow: hidden;
+        z-index: 0;
+    }
+
+    .wave {
+        position: absolute;
+        width: 200%;
+        height: 200%;
+        top: -50%;
+        left: -50%;
+        background: conic-gradient(from 0deg at 50% 50%, rgba(88, 101, 242, 0.05) 0deg, rgba(162, 57, 202, 0.05) 120deg, rgba(88, 101, 242, 0.05) 240deg, rgba(5, 5, 5, 0) 360deg);
+        animation: spin 30s linear infinite;
+        filter: blur(100px);
+    }
+    .wave:nth-child(2) {
+        animation: spin 40s linear infinite reverse;
+        opacity: 0.7;
+    }
+
+    @keyframes spin {
+        100% { transform: rotate(360deg); }
+    }
+
+    /* Minimalist Typography */
+    .title-text {
+        font-size: clamp(3rem, 8vw, 6rem);
+        font-weight: 300;
+        letter-spacing: -0.04em;
+        line-height: 1.1;
+        background: linear-gradient(to right, #fff, #a0a0a0);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .nav-link {
+        font-size: 0.75rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        opacity: 0.6;
+        transition: opacity 0.3s ease;
+    }
+    .nav-link:hover {
+        opacity: 1;
+    }
+
+    .btn-primary {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 100px;
+        padding: 0.75rem 2rem;
+        font-size: 0.8rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+    }
+    .btn-primary:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.4);
+    }
+</style>
+
+<div class="hero-bg">
+    <div class="wave"></div>
+    <div class="wave"></div>
+</div>
+
+<div class="w-full min-h-screen flex flex-col items-center relative z-10 selection:bg-[#5865F2] selection:text-white">
+    <!-- Minimal Navigation -->
+    <nav class="w-full max-w-7xl p-8 flex justify-between items-center">
         <div class="flex items-center gap-4">
-            <span class="hidden sm:block opacity-75">Welcome, {{ user.name }}</span>
-            <a href="/dashboard" class="bg-[#5865F2] hover:bg-[#4752C4] px-6 py-2 rounded-lg font-medium transition-colors">
-            Dashboard
-            </a>
-            <a href="/logout" class="opacity-50 hover:opacity-100 text-sm">Logout</a>
+            <img src="/assets/website_logo.png" alt="Logo" class="w-10 h-10 object-contain drop-shadow-[0_0_15px_rgba(88,101,242,0.3)]" />
         </div>
-        {% else %}
-        <a href="/login" class="bg-[#5865F2] hover:bg-[#4752C4] px-6 py-2 rounded-lg font-medium transition-colors">
-            Login with Discord
-        </a>
-        {% endif %}
-    </div>
+        <div class="flex items-center gap-8">
+            <a href="https://discord.gg/J4SHrpcKaK" target="_blank" class="nav-link hidden sm:block">Support</a>
+
+            {% if user %}
+            <a href="/logout" class="nav-link hidden sm:block">Logout</a>
+            <a href="/dashboard" class="btn-primary">Dashboard</a>
+            {% else %}
+            <a href="/login" class="btn-primary">Login</a>
+            {% endif %}
+        </div>
     </nav>
 
-    <!-- Hero Section -->
-    <main class="flex-1 w-full max-w-6xl p-6 flex flex-col items-center justify-center text-center gap-8 mt-12">
-    <img src="/assets/website_logo.png" alt="Nexus Bot" class="w-48 h-48 drop-shadow-2xl mb-4 rounded-xl" />
+    <!-- Center Stage Hero -->
+    <main class="flex-1 w-full max-w-5xl px-6 flex flex-col items-center justify-center text-center -mt-20">
+        <h1 class="title-text mb-6">Intelligence.<br>Not Just Code.</h1>
+        <p class="text-xl md:text-2xl font-light opacity-50 max-w-2xl leading-relaxed mb-12">
+            The definitive moderation and engagement engine, exclusively engineered for the Nexus community.
+        </p>
 
-    <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight">
-        Next-Gen Server <span class="text-[#5865F2]">Management</span>
-    </h1>
-
-    <p class="text-xl opacity-70 max-w-2xl leading-relaxed">
-        The ultimate, modular Discord bot built exclusively for the Nexus community. Featuring advanced anti-nuke, dynamic leveling, and custom ticket systems.
-    </p>
-
-    <div class="flex gap-4 mt-4">
         {% if not user %}
-        <a href="/login" class="bg-[#5865F2] hover:bg-[#4752C4] px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-[#5865F2]/20 transition-all hover:scale-105">
-        Get Started
+        <a href="/login" class="btn-primary" style="padding: 1rem 3rem; font-size: 0.9rem;">
+            Authenticate
         </a>
         {% endif %}
-        <a href="https://discord.gg/J4SHrpcKaK" target="_blank" rel="noreferrer" class="bg-white/5 hover:bg-white/10 px-8 py-3 rounded-xl font-bold text-lg border border-white/10 transition-all hover:scale-105">
-        Join Support Server
-        </a>
-    </div>
-
-    <!-- Feature Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-24 text-left px-4">
-        <div class="glass-panel p-6 rounded-3xl transition duration-300 hover:-translate-y-2 hover:bg-white/10 group">
-        <i data-lucide="shield-alert" class="w-12 h-12 text-[#5865F2] mb-6 group-hover:scale-110 transition"></i>
-        <h3 class="text-2xl font-bold mb-3">Absolute Security</h3>
-        <p class="opacity-70 leading-relaxed">Military-grade anti-nuke protection. Mitigates mass bans, mass channel deletions, and role tampering instantly.</p>
-        </div>
-
-        <div class="glass-panel p-6 rounded-3xl transition duration-300 hover:-translate-y-2 hover:bg-white/10 group">
-        <i data-lucide="sparkles" class="w-12 h-12 text-[#5865F2] mb-6 group-hover:scale-110 transition"></i>
-        <h3 class="text-2xl font-bold mb-3">Role Rewards</h3>
-        <p class="opacity-70 leading-relaxed">A fully integrated leveling system that rewards active community members with customizable roles.</p>
-        </div>
-
-        <div class="glass-panel p-6 rounded-3xl transition duration-300 hover:-translate-y-2 hover:bg-white/10 group">
-        <i data-lucide="activity" class="w-12 h-12 text-[#5865F2] mb-6 group-hover:scale-110 transition"></i>
-        <h3 class="text-2xl font-bold mb-3">Joke Meters</h3>
-        <p class="opacity-70 leading-relaxed">Test the vibes! Daily, deterministic joke meters measure members to see what kind of energy they radiate today.</p>
-        </div>
-    </div>
     </main>
 
-    <footer class="w-full p-6 text-center opacity-50 border-t border-white/5 mt-12">
-    <p>Made by 𝙰𝚗𝚐𝚛𝚢𝚝𝚘𝚊𝚜𝚝 • Still in development</p>
-    </footer>
+    <!-- Sleek Features -->
+    <div class="w-full max-w-7xl px-8 pb-24 grid grid-cols-1 md:grid-cols-3 gap-12 text-left opacity-80">
+        <div class="group">
+            <div class="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center mb-6 group-hover:border-white/30 transition duration-500">
+                <i data-lucide="shield" class="w-5 h-5 text-white/70"></i>
+            </div>
+            <h3 class="text-lg font-medium mb-3 tracking-wide">Absolute Defense</h3>
+            <p class="font-light text-white/50 text-sm leading-loose">State-of-the-art heuristic filters and robust anti-nuke algorithms designed to mitigate catastrophic threats autonomously.</p>
+        </div>
+        <div class="group">
+            <div class="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center mb-6 group-hover:border-white/30 transition duration-500">
+                <i data-lucide="activity" class="w-5 h-5 text-white/70"></i>
+            </div>
+            <h3 class="text-lg font-medium mb-3 tracking-wide">Dynamic Engagement</h3>
+            <p class="font-light text-white/50 text-sm leading-loose">Advanced leveling arrays and deterministic joke meters mathematically structured to foster organic community interaction.</p>
+        </div>
+        <div class="group">
+            <div class="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center mb-6 group-hover:border-white/30 transition duration-500">
+                <i data-lucide="cpu" class="w-5 h-5 text-white/70"></i>
+            </div>
+            <h3 class="text-lg font-medium mb-3 tracking-wide">Granular Control</h3>
+            <p class="font-light text-white/50 text-sm leading-loose">A centralized, high-performance web dashboard granting administrators absolute authority over every sub-system.</p>
+        </div>
+    </div>
 </div>
 {% endblock %}
