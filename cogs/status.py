@@ -52,7 +52,13 @@ class StatusCog(commands.Cog):
                     activity_type = discord.ActivityType.competing
 
             activity = discord.Activity(type=activity_type, name=name)
-            await self.bot.change_presence(status=discord.Status.dnd, activity=activity)
+            if not self.bot.is_closed():
+                await self.bot.change_presence(status=discord.Status.dnd, activity=activity)
+        except RuntimeError as e:
+            if "Cannot write to closing transport" in str(e):
+                pass # Silently ignore websocket drops while reconnecting
+            else:
+                print(f"Status rotation runtime error: {e}")
         except Exception as e:
             print(f"Status rotation error: {e}")
 
