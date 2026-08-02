@@ -1,181 +1,209 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="w-full min-h-screen text-white flex relative z-10">
+<div class="w-full min-h-screen text-white flex flex-col md:flex-row relative z-10 selection:bg-brand-blue selection:text-white bg-dark">
 
   <!-- Mobile Header -->
-  <div class="md:hidden w-full h-16 border-b border-white/5 flex items-center justify-between px-4 absolute top-0 left-0 bg-[#1E1F22] z-50">
+  <div class="md:hidden w-full h-16 border-b border-white/5 flex items-center justify-between px-6 absolute top-0 left-0 bg-dark/80 backdrop-blur-xl z-50">
       <div class="flex items-center gap-3">
-          <img src="/assets/website_logo.png" alt="Logo" class="w-8 h-8 rounded" />
-          <span class="font-bold">Nexus</span>
+          <img src="/assets/website_logo.png" alt="Logo" class="w-8 h-8 rounded-lg object-contain" />
+          <span class="font-display font-bold tracking-wide">Nexus</span>
       </div>
-      <button onclick="document.getElementById('sidebar').classList.toggle('-translate-x-full')" class="p-2 bg-white/5 rounded-lg border border-white/10">
-          <i data-lucide="menu" class="w-6 h-6"></i>
+      <button onclick="document.getElementById('sidebar').classList.toggle('-translate-x-full')" class="p-2 hover:bg-white/5 rounded-lg border border-transparent hover:border-white/10 transition">
+          <i data-lucide="menu" class="w-6 h-6 text-white/70"></i>
       </button>
   </div>
 
-  <!-- Sidebar -->
-  <aside id="sidebar" class="w-64 border-r border-white/5 p-4 flex flex-col gap-2 glass-panel fixed md:relative h-full z-40 transition-transform -translate-x-full md:translate-x-0">
-    <div class="flex items-center gap-3 p-2 mb-6 mt-16 md:mt-0">
-      <img src="/assets/website_logo.png" alt="Logo" class="w-8 h-8 rounded" />
-      <span class="font-bold text-lg">Nexus Admin</span>
+  <!-- High-End Sidebar -->
+  <aside id="sidebar" class="w-72 border-r border-white/5 bg-dark/40 backdrop-blur-2xl p-6 flex flex-col gap-2 fixed md:sticky top-0 h-screen z-40 transition-transform -translate-x-full md:translate-x-0">
+    <div class="flex items-center gap-3 mb-10 mt-16 md:mt-2 px-2">
+      <img src="/assets/website_logo.png" alt="Logo" class="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(79,70,229,0.3)]" />
+      <span class="font-display font-bold text-xl tracking-wide">Nexus Admin</span>
     </div>
 
-    <a href="/dashboard" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {% if tab == 'overview' %}bg-[#5865F2] text-white font-medium{% else %}hover:bg-white/5 text-white/70 hover:text-white{% endif %}">
-      <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Overview
-    </a>
-    <a href="/dashboard/automod" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {% if tab == 'automod' %}bg-[#5865F2] text-white font-medium{% else %}hover:bg-white/5 text-white/70 hover:text-white{% endif %}">
-      <i data-lucide="shield-alert" class="w-5 h-5"></i> Automod
-    </a>
-    <a href="/dashboard/leveling" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {% if tab == 'leveling' %}bg-[#5865F2] text-white font-medium{% else %}hover:bg-white/5 text-white/70 hover:text-white{% endif %}">
-      <i data-lucide="arrow-up-circle" class="w-5 h-5"></i> Leveling
-    </a>
+    <div class="space-y-1">
+        <div class="px-3 py-2 text-xs font-semibold text-white/30 uppercase tracking-widest mb-1">Configuration</div>
+        <a href="/dashboard" class="flex items-center gap-3 px-4 py-3 rounded-xl transition duration-200 {% if tab == 'overview' %}bg-white/10 text-white font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]{% else %}text-white/50 hover:bg-white/5 hover:text-white{% endif %}">
+        <i data-lucide="layout-dashboard" class="w-5 h-5 {% if tab == 'overview' %}text-brand-blue{% endif %}"></i> Overview
+        </a>
+        <a href="/dashboard/automod" class="flex items-center gap-3 px-4 py-3 rounded-xl transition duration-200 {% if tab == 'automod' %}bg-white/10 text-white font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]{% else %}text-white/50 hover:bg-white/5 hover:text-white{% endif %}">
+        <i data-lucide="shield-alert" class="w-5 h-5 {% if tab == 'automod' %}text-brand-blue{% endif %}"></i> Automod
+        </a>
+        <a href="/dashboard/leveling" class="flex items-center gap-3 px-4 py-3 rounded-xl transition duration-200 {% if tab == 'leveling' %}bg-white/10 text-white font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]{% else %}text-white/50 hover:bg-white/5 hover:text-white{% endif %}">
+        <i data-lucide="bar-chart-2" class="w-5 h-5 {% if tab == 'leveling' %}text-brand-blue{% endif %}"></i> Leveling Engine
+        </a>
+    </div>
 
-    <div class="mt-auto">
-       <div class="flex items-center gap-3 p-4 bg-black/20 rounded-xl mb-4 border border-white/5">
-          <img src="{{ user.avatar_url }}" alt="" class="w-10 h-10 rounded-full bg-black/50" onerror="this.style.display='none'" />
-          <div class="overflow-hidden">
-            <div class="font-medium truncate">{{ user.name }}</div>
-            <div class="text-xs opacity-50">Admin</div>
+    <div class="mt-auto pt-6 border-t border-white/5">
+       <div class="flex items-center gap-3 p-3 rounded-xl mb-2 hover:bg-white/5 transition">
+          <img src="{{ user.avatar_url }}" alt="" class="w-10 h-10 rounded-full border border-white/10" onerror="this.style.display='none'" />
+          <div class="overflow-hidden flex-1">
+            <div class="font-medium text-sm truncate text-white/90">{{ user.name }}</div>
+            <div class="text-xs text-white/40">Administrator</div>
           </div>
        </div>
-       <a href="/logout" class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-red-500/10 text-red-400 transition">
-         <i data-lucide="log-out" class="w-5 h-5"></i> Logout
+       <a href="/logout" class="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400/80 hover:text-red-400 transition text-sm font-medium">
+         <i data-lucide="log-out" class="w-4 h-4"></i> Sign Out
        </a>
     </div>
   </aside>
 
-  <!-- Main Content -->
-  <main class="flex-1 overflow-y-auto mt-16 md:mt-0">
+  <!-- Main Content Area -->
+  <main class="flex-1 overflow-y-auto mt-16 md:mt-0 p-6 md:p-10 lg:p-14">
+    <div class="max-w-6xl mx-auto w-full" data-aos="fade-in">
 
     {% if tab == 'overview' %}
-    <div class="p-4 md:p-8">
-      <h2 class="text-3xl font-bold mb-6">Server Overview</h2>
+      <header class="mb-10">
+          <h2 class="font-display text-4xl font-bold mb-2">Platform Overview</h2>
+          <p class="text-white/50">Real-time telemetry and infrastructure statistics.</p>
+      </header>
+
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="glass-panel p-6 rounded-2xl">
-          <div class="opacity-60 text-sm font-semibold uppercase tracking-wider mb-2">Total Members</div>
-          <div class="text-4xl font-bold text-[#5865F2]">{{ stats.total_users }}</div>
+        <div class="glass-panel p-8 rounded-3xl relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-brand-blue/10 rounded-full filter blur-[40px] group-hover:bg-brand-blue/20 transition duration-500"></div>
+          <div class="text-xs font-semibold text-white/40 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <i data-lucide="users" class="w-4 h-4"></i> Population
+          </div>
+          <div class="text-5xl font-display font-light text-white">{{ stats.total_users }}</div>
         </div>
-        <div class="glass-panel p-6 rounded-2xl">
-          <div class="opacity-60 text-sm font-semibold uppercase tracking-wider mb-2">Messages Logged</div>
-          <div class="text-4xl font-bold text-[#EB459E]">{{ stats.messages_logged }}</div>
+
+        <div class="glass-panel p-8 rounded-3xl relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-brand-purple/10 rounded-full filter blur-[40px] group-hover:bg-brand-purple/20 transition duration-500"></div>
+          <div class="text-xs font-semibold text-white/40 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <i data-lucide="activity" class="w-4 h-4"></i> Punishments Logged
+          </div>
+          <div class="text-5xl font-display font-light text-white">{{ stats.messages_logged }}</div>
         </div>
-        <div class="glass-panel p-6 rounded-2xl">
-          <div class="opacity-60 text-sm font-semibold uppercase tracking-wider mb-2">Servers Active</div>
-          <div class="text-4xl font-bold text-[#57F287]">{{ stats.server_count }}</div>
+
+        <div class="glass-panel p-8 rounded-3xl relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full filter blur-[40px] group-hover:bg-emerald-500/20 transition duration-500"></div>
+          <div class="text-xs font-semibold text-white/40 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <i data-lucide="server" class="w-4 h-4"></i> Active Nodes
+          </div>
+          <div class="text-5xl font-display font-light text-white">{{ stats.server_count }}</div>
         </div>
       </div>
-    </div>
     {% endif %}
 
     {% if tab == 'automod' %}
-    <div class="p-4 md:p-8">
-      <h2 class="text-3xl font-bold mb-6 flex items-center gap-3">
-        <div class="bg-[#5865F2]/20 p-2 rounded-xl border border-[#5865F2]/30"><i data-lucide="shield-alert" class="text-[#5865F2]"></i></div> Automod Configuration
-      </h2>
-      <p class="opacity-70 mb-8 max-w-2xl">Configure your server's security settings. Note: Some advanced configurations still require using the in-discord !setup command.</p>
+      <header class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+              <h2 class="font-display text-4xl font-bold mb-2 flex items-center gap-3">
+                  Automod Architecture
+              </h2>
+              <p class="text-white/50 max-w-xl">Configure heuristic security protocols. Toggle individual modules to harden server defenses against automated threats.</p>
+          </div>
+      </header>
 
-      <div class="glass-panel p-6 rounded-2xl max-w-2xl">
+      <div class="glass-panel p-8 rounded-3xl max-w-3xl">
         <form method="POST" action="/dashboard/automod">
 
-          <!-- Anti Spam -->
-          <div class="flex items-center justify-between py-4 border-b border-white/10">
-            <div>
-              <div class="font-semibold">Anti-Spam</div>
-              <div class="text-sm opacity-60">Prevents users from sending messages too rapidly.</div>
-            </div>
-            <select name="automod_spam" class="bg-black/40 border border-white/10 rounded px-3 py-2 text-white">
-                <option value="1" {% if config.automod_spam == '1' %}selected{% endif %}>Enabled</option>
-                <option value="0" {% if config.automod_spam == '0' %}selected{% endif %}>Disabled</option>
-            </select>
+          <div class="space-y-6">
+              <!-- Anti Spam -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/5">
+                <div>
+                  <div class="font-medium text-lg text-white/90">Anti-Spam Filter</div>
+                  <div class="text-sm text-white/40 mt-1">Prevents high-frequency message propagation.</div>
+                </div>
+                <select name="automod_spam" class="w-full sm:w-40 rounded-xl px-4 py-2.5 text-sm font-medium border-0 bg-white/5 text-white/80 focus:ring-2 focus:ring-brand-blue/50 cursor-pointer appearance-none">
+                    <option value="1" {% if config.automod_spam == '1' %}selected{% endif %}>🟢 Active</option>
+                    <option value="0" {% if config.automod_spam == '0' %}selected{% endif %}>⭕ Disabled</option>
+                </select>
+              </div>
+
+              <!-- Invites -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/5">
+                <div>
+                  <div class="font-medium text-lg text-white/90">Invite Nullifier</div>
+                  <div class="text-sm text-white/40 mt-1">Automatically purges unauthorized discord.gg hyperlinks.</div>
+                </div>
+                <select name="automod_invites" class="w-full sm:w-40 rounded-xl px-4 py-2.5 text-sm font-medium border-0 bg-white/5 text-white/80 focus:ring-2 focus:ring-brand-blue/50 cursor-pointer appearance-none">
+                    <option value="1" {% if config.automod_invites == '1' %}selected{% endif %}>🟢 Active</option>
+                    <option value="0" {% if config.automod_invites == '0' %}selected{% endif %}>⭕ Disabled</option>
+                </select>
+              </div>
+
+              <!-- English Only -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/5">
+                <div>
+                  <div class="font-medium text-lg text-white/90">Linguistic Filter (English)</div>
+                  <div class="text-sm text-white/40 mt-1">Quarantines messages failing alphanumeric thresholds.</div>
+                </div>
+                <select name="automod_english" class="w-full sm:w-40 rounded-xl px-4 py-2.5 text-sm font-medium border-0 bg-white/5 text-white/80 focus:ring-2 focus:ring-brand-blue/50 cursor-pointer appearance-none">
+                    <option value="1" {% if config.automod_english == '1' %}selected{% endif %}>🟢 Active</option>
+                    <option value="0" {% if config.automod_english == '0' %}selected{% endif %}>⭕ Disabled</option>
+                </select>
+              </div>
+
+              <!-- Bot filter -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div class="font-medium text-lg text-white/90">Foreign Command Filter</div>
+                  <div class="text-sm text-white/40 mt-1">Intercepts unauthorized bot prefixes (!, ?, -) to reduce clutter.</div>
+                </div>
+                <select name="automod_bot" class="w-full sm:w-40 rounded-xl px-4 py-2.5 text-sm font-medium border-0 bg-white/5 text-white/80 focus:ring-2 focus:ring-brand-blue/50 cursor-pointer appearance-none">
+                    <option value="1" {% if config.automod_bot == '1' %}selected{% endif %}>🟢 Active</option>
+                    <option value="0" {% if config.automod_bot == '0' %}selected{% endif %}>⭕ Disabled</option>
+                </select>
+              </div>
           </div>
 
-          <!-- Invites -->
-          <div class="flex items-center justify-between py-4 border-b border-white/10">
-            <div>
-              <div class="font-semibold">Invite Blocker</div>
-              <div class="text-sm opacity-60">Automatically deletes discord.gg links.</div>
-            </div>
-            <select name="automod_invites" class="bg-black/40 border border-white/10 rounded px-3 py-2 text-white">
-                <option value="1" {% if config.automod_invites == '1' %}selected{% endif %}>Enabled</option>
-                <option value="0" {% if config.automod_invites == '0' %}selected{% endif %}>Disabled</option>
-            </select>
+          <div class="mt-8 pt-6 border-t border-white/5 flex justify-end">
+              <button type="submit" class="bg-white text-black hover:bg-white/90 px-8 py-3 rounded-full font-semibold tracking-wide transition shadow-[0_0_20px_rgba(255,255,255,0.15)]">
+                  Deploy Configuration
+              </button>
           </div>
-
-          <!-- English Only -->
-          <div class="flex items-center justify-between py-4 border-b border-white/10">
-            <div>
-              <div class="font-semibold">English Only Mode</div>
-              <div class="text-sm opacity-60">Deletes messages containing high amounts of non-English characters.</div>
-            </div>
-            <select name="automod_english" class="bg-black/40 border border-white/10 rounded px-3 py-2 text-white">
-                <option value="1" {% if config.automod_english == '1' %}selected{% endif %}>Enabled</option>
-                <option value="0" {% if config.automod_english == '0' %}selected{% endif %}>Disabled</option>
-            </select>
-          </div>
-
-          <!-- Bot filter -->
-          <div class="flex items-center justify-between py-4">
-            <div>
-              <div class="font-semibold">Bot Command Filter</div>
-              <div class="text-sm opacity-60">Deletes unrecognized bot prefixes (!, ?, -, etc).</div>
-            </div>
-            <select name="automod_bot" class="bg-black/40 border border-white/10 rounded px-3 py-2 text-white">
-                <option value="1" {% if config.automod_bot == '1' %}selected{% endif %}>Enabled</option>
-                <option value="0" {% if config.automod_bot == '0' %}selected{% endif %}>Disabled</option>
-            </select>
-          </div>
-
-          <button type="submit" class="mt-4 bg-[#5865F2] hover:bg-[#4752C4] w-full py-2 rounded-lg font-bold transition">Save Settings</button>
         </form>
       </div>
-    </div>
     {% endif %}
 
     {% if tab == 'leveling' %}
-    <div class="p-4 md:p-8">
-      <h2 class="text-3xl font-bold mb-6 flex items-center gap-3">
-        <div class="bg-[#5865F2]/20 p-2 rounded-xl border border-[#5865F2]/30"><i data-lucide="arrow-up-circle" class="text-[#5865F2]"></i></div> Leveling Engine
-      </h2>
-      <p class="opacity-70 mb-8 max-w-2xl">Manage XP rates, role rewards, and ignored channels.</p>
+      <header class="mb-10">
+          <h2 class="font-display text-4xl font-bold mb-2 flex items-center gap-3">
+              Leveling Engine
+          </h2>
+          <p class="text-white/50 max-w-xl">Fine-tune algorithmic progression rates, role distribution, and channel hierarchies.</p>
+      </header>
 
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
 
         <!-- Settings -->
-        <div class="glass-panel p-6 rounded-2xl">
-           <h3 class="text-xl font-bold mb-4">Settings</h3>
-           <form method="POST" action="/dashboard/leveling_settings" class="space-y-4">
-              <div class="grid grid-cols-2 gap-4">
+        <div class="glass-panel p-8 rounded-3xl h-fit">
+           <h3 class="text-xl font-display font-semibold mb-6 text-white/90">Progression Variables</h3>
+
+           <form method="POST" action="/dashboard/leveling_settings" class="space-y-6">
+
+              <div class="grid grid-cols-2 gap-6">
                 <div>
-                  <label class="block text-sm opacity-70 mb-1">XP Per Message (Min - Max)</label>
-                  <div class="flex gap-2">
-                    <input type="number" name="xp_min" value="{{ config.xp_min }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
-                    <span class="py-2">-</span>
-                    <input type="number" name="xp_max" value="{{ config.xp_max }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
+                  <label class="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">XP Gain (Min/Max)</label>
+                  <div class="flex items-center gap-3">
+                    <input type="number" name="xp_min" value="{{ config.xp_min }}" class="w-full rounded-xl px-4 py-2.5 text-sm font-medium border border-white/5 bg-black/40 text-white/90" />
+                    <span class="text-white/30 font-light">-</span>
+                    <input type="number" name="xp_max" value="{{ config.xp_max }}" class="w-full rounded-xl px-4 py-2.5 text-sm font-medium border border-white/5 bg-black/40 text-white/90" />
                   </div>
                 </div>
                 <div>
-                  <label class="block text-sm opacity-70 mb-1">Cooldown (Seconds)</label>
-                  <input type="number" name="xp_cooldown" value="{{ config.xp_cooldown }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
+                  <label class="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Cooldown (Sec)</label>
+                  <input type="number" name="xp_cooldown" value="{{ config.xp_cooldown }}" class="w-full rounded-xl px-4 py-2.5 text-sm font-medium border border-white/5 bg-black/40 text-white/90" />
                 </div>
               </div>
 
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid grid-cols-2 gap-6">
                 <div>
-                  <label class="block text-sm opacity-70 mb-1">Min Message Length</label>
-                  <input type="number" name="leveling_min_length" value="{{ config.leveling_min_length }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
+                  <label class="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Min. Msg Length</label>
+                  <input type="number" name="leveling_min_length" value="{{ config.leveling_min_length }}" class="w-full rounded-xl px-4 py-2.5 text-sm font-medium border border-white/5 bg-black/40 text-white/90" />
                 </div>
                 <div>
-                  <label class="block text-sm opacity-70 mb-1">Role Stacking Behavior</label>
-                  <select name="leveling_role_stacking" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white">
-                      <option value="stack" {% if config.leveling_role_stacking == 'stack' %}selected{% endif %}>Stack (Keep Old Roles)</option>
-                      <option value="replace" {% if config.leveling_role_stacking == 'replace' %}selected{% endif %}>Replace (Remove Old Roles)</option>
+                  <label class="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Role Handling</label>
+                  <select name="leveling_role_stacking" class="w-full rounded-xl px-4 py-2.5 text-sm font-medium border border-white/5 bg-black/40 text-white/90 appearance-none">
+                      <option value="stack" {% if config.leveling_role_stacking == 'stack' %}selected{% endif %}>Stack Roles</option>
+                      <option value="replace" {% if config.leveling_role_stacking == 'replace' %}selected{% endif %}>Replace Roles</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label class="block text-sm opacity-70 mb-1">Level-Up Announcement Channel</label>
+                <label class="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Announcement Router</label>
                 <select name="leveling_announcement_channel" class="js-choice">
                   <option value="current" {% if config.leveling_announcement_channel == 'current' %}selected{% endif %}>Current Channel</option>
                   <option value="dm" {% if config.leveling_announcement_channel == 'dm' %}selected{% endif %}>Direct Message</option>
@@ -184,77 +212,86 @@
                   {% endfor %}
                 </select>
               </div>
-              <div>
-                <label class="block text-sm opacity-70 mb-1">Custom Level-Up Message (Use {user}, {level}, {role})</label>
-                <input type="text" name="leveling_custom_message" value="{{ config.leveling_custom_message }}" class="bg-black/40 border border-white/10 rounded px-3 py-2 w-full text-white" />
-              </div>
 
               <div>
-                <label class="block text-sm opacity-70 mb-1">Whitelisted Channels</label>
+                <label class="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Custom Broadcast Message</label>
+                <input type="text" name="leveling_custom_message" value="{{ config.leveling_custom_message }}" class="w-full rounded-xl px-4 py-2.5 text-sm font-medium border border-white/5 bg-black/40 text-white/90" />
+                <p class="text-[10px] text-white/30 mt-2 uppercase tracking-wide">Available variables: {user}, {level}, {role}</p>
+              </div>
+
+              <hr class="border-white/5 my-6">
+
+              <div>
+                <label class="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Permitted Channels (Whitelist)</label>
                 <select name="leveling_whitelist" class="js-choice" multiple>
                   {% for c in channels %}
                     <option value="{{ c.id }}" {% if is_selected(c.id, config.leveling_whitelist) %}selected{% endif %}>#{{ c.name }}</option>
                   {% endfor %}
                 </select>
-                <p class="text-xs opacity-50 mt-1">If set, ONLY these channels will grant XP.</p>
               </div>
 
-              <div>
-                <label class="block text-sm opacity-70 mb-1">Blacklisted Channels</label>
-                <select name="leveling_blacklist" class="js-choice" multiple>
-                  {% for c in channels %}
-                    <option value="{{ c.id }}" {% if is_selected(c.id, config.leveling_blacklist) %}selected{% endif %}>#{{ c.name }}</option>
-                  {% endfor %}
-                </select>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label class="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Blacklisted Channels</label>
+                    <select name="leveling_blacklist" class="js-choice" multiple>
+                      {% for c in channels %}
+                        <option value="{{ c.id }}" {% if is_selected(c.id, config.leveling_blacklist) %}selected{% endif %}>#{{ c.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Blacklisted Roles</label>
+                    <select name="leveling_role_blacklist" class="js-choice" multiple>
+                      {% for r in roles %}
+                        <option value="{{ r.id }}" {% if is_selected(r.id, config.leveling_role_blacklist) %}selected{% endif %}>@{{ r.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
               </div>
 
-              <div>
-                <label class="block text-sm opacity-70 mb-1">Blacklisted Roles</label>
-                <select name="leveling_role_blacklist" class="js-choice" multiple>
-                  {% for r in roles %}
-                    <option value="{{ r.id }}" {% if is_selected(r.id, config.leveling_role_blacklist) %}selected{% endif %}>@{{ r.name }}</option>
-                  {% endfor %}
-                </select>
-                <p class="text-xs opacity-50 mt-1">Users with these roles will NOT grant XP.</p>
+              <div class="pt-6">
+                  <button type="submit" class="w-full bg-white text-black hover:bg-white/90 py-3.5 rounded-xl font-semibold tracking-wide transition shadow-[0_0_15px_rgba(255,255,255,0.1)]">
+                    Sync Configuration
+                  </button>
               </div>
-
-              <button type="submit" class="bg-[#5865F2] hover:bg-[#4752C4] w-full py-2 rounded-lg font-bold transition mt-2">
-                Save Settings
-              </button>
            </form>
         </div>
 
         <div class="flex flex-col gap-8">
-          <!-- Role Rewards -->
-          <div class="bg-black/20 border border-white/5 p-6 rounded-2xl flex flex-col flex-1">
-            <h3 class="text-xl font-bold mb-4">Role Rewards</h3>
 
-          <div class="flex-1">
-            {% if rewards|length == 0 %}
-              <div class="opacity-50 text-sm mb-4">You have no role rewards configured yet.</div>
-            {% else %}
-              <div class="space-y-2 mb-6">
-                {% for r in rewards %}
-                  <div class="flex justify-between items-center bg-black/40 px-4 py-2 rounded border border-white/5">
-                    <span class="font-semibold">Level {{ r.level }}</span>
-                    <div class="flex items-center gap-4">
-                      <span class="opacity-70 text-sm text-ellipsis overflow-hidden whitespace-nowrap max-w-[150px]">Role ID: {{ r.role_id }}</span>
+          <!-- Role Rewards -->
+          <div class="glass-panel p-8 rounded-3xl flex flex-col h-fit">
+            <h3 class="text-xl font-display font-semibold mb-2 text-white/90">Role Distribution</h3>
+            <p class="text-sm text-white/40 mb-6">Automatically assign roles at specified thresholds.</p>
+
+            <div class="mb-6">
+              {% if rewards|length == 0 %}
+                <div class="py-8 text-center border border-dashed border-white/10 rounded-2xl text-white/30 text-sm">No role milestones configured.</div>
+              {% else %}
+                <div class="space-y-3">
+                  {% for r in rewards %}
+                    <div class="flex justify-between items-center bg-black/30 px-4 py-3 rounded-xl border border-white/5 group hover:border-white/10 transition">
+                      <div class="flex items-center gap-3">
+                          <span class="w-8 h-8 rounded-lg bg-brand-blue/10 text-brand-blue flex items-center justify-center font-bold text-sm">{{ r.level }}</span>
+                          <span class="text-white/80 text-sm">Role ID: {{ r.role_id }}</span>
+                      </div>
                       <form method="POST" action="/dashboard/leveling_reward_delete" class="inline">
                           <input type="hidden" name="level" value="{{ r.level }}" />
-                          <button type="submit" class="text-red-400 hover:text-red-300 font-medium">Remove</button>
+                          <button type="submit" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-500/10 text-red-400/50 hover:text-red-400 transition">
+                              <i data-lucide="x" class="w-4 h-4"></i>
+                          </button>
                       </form>
                     </div>
-                  </div>
-                {% endfor %}
-              </div>
-            {% endif %}
-          </div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
 
-          <div class="pt-4 border-t border-white/10 mt-auto">
-            <h4 class="text-sm font-semibold mb-2">Add New Reward</h4>
-            <form method="POST" action="/dashboard/leveling_reward_add" class="flex gap-2">
-               <input type="number" name="level" placeholder="Level" required class="bg-black/40 border border-white/10 rounded px-3 py-2 w-24 text-white" />
-                 <div class="flex-1 min-w-[200px]">
+            <div class="pt-6 border-t border-white/5">
+              <form method="POST" action="/dashboard/leveling_reward_add" class="flex flex-col sm:flex-row gap-3">
+                 <input type="number" name="level" placeholder="Level" required class="w-24 rounded-xl px-4 py-2.5 text-sm font-medium border border-white/5 bg-black/40 text-white/90" />
+                 <div class="flex-1">
                    <select name="role_id" class="js-choice">
                      <option value="">Select a Role...</option>
                      {% for r in roles %}
@@ -262,43 +299,44 @@
                      {% endfor %}
                    </select>
                  </div>
-                 <button type="submit" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg font-medium transition border border-white/10 h-[42px]">
-                 Add
-               </button>
-            </form>
-          </div>
+                 <button type="submit" class="bg-brand-blue hover:bg-brand-blue/80 px-6 rounded-xl font-medium transition text-sm flex items-center justify-center h-[42px] mt-1 sm:mt-0">
+                   Add
+                 </button>
+              </form>
+            </div>
           </div>
 
           <!-- Role Multipliers -->
-          <div class="glass-panel p-6 rounded-2xl flex flex-col flex-1">
-            <h3 class="text-xl font-bold mb-4">Role Multipliers</h3>
-            <p class="text-sm opacity-60 mb-4">Users with these roles will earn multiplied XP.</p>
+          <div class="glass-panel p-8 rounded-3xl flex flex-col h-fit">
+            <h3 class="text-xl font-display font-semibold mb-2 text-white/90">XP Multipliers</h3>
+            <p class="text-sm text-white/40 mb-6">Boost progression rates for specific server roles.</p>
 
-            <div class="flex-1">
+            <div class="mb-6">
               {% if multipliers|length == 0 %}
-                <div class="opacity-50 text-sm mb-4">No role multipliers configured.</div>
+                <div class="py-8 text-center border border-dashed border-white/10 rounded-2xl text-white/30 text-sm">No active multipliers.</div>
               {% else %}
-                <div class="space-y-2 mb-6">
+                <div class="space-y-3">
                   {% for m in multipliers %}
-                    <div class="flex justify-between items-center bg-black/40 px-4 py-2 rounded border border-white/5">
-                      <span class="font-semibold">{{ m.multiplier }}x XP</span>
-                      <div class="flex items-center gap-4">
-                        <span class="opacity-70 text-sm">Role ID: {{ m.role_id }}</span>
-                        <form method="POST" action="/dashboard/leveling_multiplier_delete" class="inline">
-                            <input type="hidden" name="role_id" value="{{ m.role_id }}" />
-                            <button type="submit" class="text-red-400 hover:text-red-300 font-medium">Remove</button>
-                        </form>
+                    <div class="flex justify-between items-center bg-black/30 px-4 py-3 rounded-xl border border-white/5 group hover:border-white/10 transition">
+                      <div class="flex items-center gap-3">
+                          <span class="px-2.5 py-1 rounded-md bg-brand-purple/10 text-brand-purple font-bold text-xs">{{ m.multiplier }}x</span>
+                          <span class="text-white/80 text-sm truncate max-w-[150px]">ID: {{ m.role_id }}</span>
                       </div>
+                      <form method="POST" action="/dashboard/leveling_multiplier_delete" class="inline">
+                          <input type="hidden" name="role_id" value="{{ m.role_id }}" />
+                          <button type="submit" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-500/10 text-red-400/50 hover:text-red-400 transition">
+                              <i data-lucide="x" class="w-4 h-4"></i>
+                          </button>
+                      </form>
                     </div>
                   {% endfor %}
                 </div>
               {% endif %}
             </div>
 
-            <div class="pt-4 border-t border-white/10 mt-auto">
-              <h4 class="text-sm font-semibold mb-2">Add New Multiplier</h4>
-              <form method="POST" action="/dashboard/leveling_multiplier_add" class="flex gap-2 items-start">
-                 <div class="flex-1 min-w-[200px]">
+            <div class="pt-6 border-t border-white/5">
+              <form method="POST" action="/dashboard/leveling_multiplier_add" class="flex flex-col sm:flex-row gap-3">
+                 <div class="flex-1">
                    <select name="role_id" class="js-choice" required>
                      <option value="">Select a Role...</option>
                      {% for r in roles %}
@@ -306,19 +344,19 @@
                      {% endfor %}
                    </select>
                  </div>
-                 <input type="number" step="0.1" name="multiplier" placeholder="e.g. 1.5" required class="bg-black/40 border border-white/10 rounded px-3 py-2 w-24 text-white h-[42px]" />
-                 <button type="submit" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg font-medium transition border border-white/10 h-[42px]">
+                 <input type="number" step="0.1" name="multiplier" placeholder="1.5" required class="w-24 rounded-xl px-4 py-2.5 text-sm font-medium border border-white/5 bg-black/40 text-white/90 h-[42px] mt-1 sm:mt-0" />
+                 <button type="submit" class="bg-brand-purple hover:bg-brand-purple/80 px-6 rounded-xl font-medium transition text-sm flex items-center justify-center h-[42px] mt-1 sm:mt-0">
                    Add
                  </button>
               </form>
             </div>
           </div>
-        </div>
 
+        </div>
       </div>
-    </div>
     {% endif %}
 
+    </div>
   </main>
 </div>
 {% endblock %}
