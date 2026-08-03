@@ -15,6 +15,8 @@ app.config["DISCORD_CLIENT_ID"] = os.getenv("DISCORD_CLIENT_ID")
 app.config["DISCORD_CLIENT_SECRET"] = os.getenv("DISCORD_CLIENT_SECRET")
 app.config["DISCORD_REDIRECT_URI"] = os.getenv("OAUTH_REDIRECT_URI", "http://78.154.103.22:12166/callback")
 
+SUPPORT_SERVER_ID = 1519633747559841844
+
 try:
     discord_auth = DiscordOAuth2Session(app)
 except Exception as e:
@@ -28,17 +30,28 @@ def get_db():
 
 async def is_authorized():
     try:
-        # Fallback to bot owner ID
+        # 1. Check if user is the Bot Owner
         user = await discord_auth.fetch_user()
         if str(user.id) == os.getenv("OWNER_ID"):
             return True
 
+        # 2. Check if user has "Manage Server" or "Administrator" in the specific Project Nexus Server
         user_guilds = await discord_auth.fetch_guilds()
-        bot_guild_ids = [g.id for g in app.bot.guilds]
         for g in user_guilds:
-            # quart-discord returns a discord.Permissions object for g.permissions
-            if g.id in bot_guild_ids and getattr(g.permissions, 'administrator', False):
-                return True
+            if g.id == SUPPORT_SERVER_ID:
+                is_admin = getattr(g.permissions, 'administrator', False)
+                can_manage = getattr(g.permissions, 'manage_guild', False)
+                # Fallback to bitwise check if getattr fails for some reason
+                if not is_admin and not can_manage:
+                    try:
+                        perms_val = int(g.permissions.value)
+                        is_admin = (perms_val & 0x8) == 0x8
+                        can_manage = (perms_val & 0x20) == 0x20
+                    except:
+                        pass
+
+                if is_admin or can_manage:
+                    return True
 
         return False
     except Exception as e:
@@ -56,7 +69,13 @@ async def index():
 async def login():
     if not discord_auth:
         return "Discord OAuth not configured", 500
-    return await discord_auth.create_session()
+    return await discord_auth.create_session(scopes=["identify", "guilds"])
+
+@app.route("/invite/")
+async def invite():
+    if not discord_auth:
+        return "Discord OAuth not configured", 500
+    return await discord_auth.create_session(scopes=["identify", "bot", "guilds.join"])
 
 @app.route("/callback/")
 async def callback():
@@ -64,7 +83,35 @@ async def callback():
         return "Discord OAuth not configured", 500
     try:
         await discord_auth.callback()
-        return redirect(url_for("dashboard_overview"))
+
+        # Determine where to redirect based on scopes
+        token_info = await discord_auth.get_authorization_token()
+        scopes = token_info.get("scope", "").split()
+
+        if "guilds.join" in scopes:
+            # They came from /invite, add them to the support server
+            user = await discord_auth.fetch_user()
+            bot_token = os.getenv("DISCORD_TOKEN")
+            access_token = token_info.get("access_token")
+
+            if bot_token and access_token:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    url = f"https://discord.com/api/v10/guilds/{SUPPORT_SERVER_ID}/members/{user.id}"
+                    headers = {
+                        "Authorization": f"Bot {bot_token}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "access_token": access_token
+                    }
+                    await session.put(url, headers=headers, json=payload)
+
+            # Send them to the support server invite manually, or just back home
+            return redirect("https://discord.gg/J4SHrpcKaK")
+        else:
+            # Standard dashboard login
+            return redirect(url_for("dashboard_overview"))
     except Exception as e:
         return f"Error logging in: {e}", 400
 
