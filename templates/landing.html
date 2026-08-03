@@ -10,17 +10,6 @@
         </div>
         <div class="flex items-center gap-6">
             <a href="https://discord.gg/J4SHrpcKaK" target="_blank" class="text-sm font-medium tracking-wide text-white/60 hover:text-white transition hidden sm:block">Community</a>
-
-            {% if user %}
-            <a href="/logout" class="text-sm font-medium tracking-wide text-white/60 hover:text-white transition hidden sm:block">Sign Out</a>
-            <a href="/dashboard" class="glass-panel px-6 py-2 rounded-full text-sm font-semibold tracking-wide hover:bg-white/5 transition flex items-center gap-2">
-                Dashboard <i data-lucide="arrow-right" class="w-4 h-4"></i>
-            </a>
-            {% else %}
-            <a href="/login" class="glass-panel px-6 py-2 rounded-full text-sm font-semibold tracking-wide hover:bg-white/5 transition flex items-center gap-2">
-                Authenticate <i data-lucide="arrow-right" class="w-4 h-4"></i>
-            </a>
-            {% endif %}
         </div>
     </nav>
 
@@ -41,15 +30,9 @@
         </p>
 
         <div data-aos="fade-up" data-aos-delay="600" class="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-            {% if not user %}
-            <a href="/login" class="bg-white text-black hover:bg-white/90 px-8 py-4 rounded-full font-bold tracking-wide transition shadow-[0_0_30px_rgba(255,255,255,0.2)] flex items-center justify-center gap-2">
+            <a href="/invite" class="bg-white text-black hover:bg-white/90 px-8 py-4 rounded-full font-bold tracking-wide transition shadow-[0_0_30px_rgba(255,255,255,0.2)] flex items-center justify-center gap-2">
                 Get Started <i data-lucide="chevron-right" class="w-5 h-5"></i>
             </a>
-            {% else %}
-            <a href="/dashboard" class="bg-white text-black hover:bg-white/90 px-8 py-4 rounded-full font-bold tracking-wide transition shadow-[0_0_30px_rgba(255,255,255,0.2)] flex items-center justify-center gap-2">
-                Open Dashboard <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-            </a>
-            {% endif %}
         </div>
     </main>
 
