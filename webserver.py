@@ -69,19 +69,19 @@ async def index():
 async def login():
     if not discord_auth:
         return "Discord OAuth not configured", 500
-    return discord_auth.create_session(scope=["identify", "guilds"])
+    return await discord_auth.create_session(scope=["identify", "guilds"])
 
 @app.route("/invite", strict_slashes=False)
 async def invite():
     if not discord_auth:
         return "Discord OAuth not configured", 500
-    return discord_auth.create_session(scope=["identify", "guilds", "guilds.join"])
+    return await discord_auth.create_session(scope=["identify", "guilds", "guilds.join"])
 
 @app.route("/bot-invite", strict_slashes=False)
 async def bot_invite():
     if not discord_auth:
         return "Discord OAuth not configured", 500
-    return discord_auth.create_session(scope=["identify", "guilds", "bot", "guilds.join"])
+    return await discord_auth.create_session(scope=["identify", "guilds", "bot", "guilds.join"])
 
 @app.route("/callback", strict_slashes=False)
 async def callback():
@@ -139,7 +139,7 @@ async def github_webhook():
     if event != "push":
         return "Ignored", 200
 
-    payload = await request.json
+    payload = await request.get_json()
     if not payload:
         return "Invalid payload", 400
 
