@@ -126,6 +126,8 @@ class NexusBot(commands.Bot):
         await self.load_extension("cogs.antinuke")
         await self.load_extension("cogs.tickets")
         await self.load_extension("cogs.utility")
+        await self.load_extension("cogs.livestatus")
+        await self.load_extension("cogs.changelogs")
         await self.load_extension("cogs.misc")
         await self.load_extension("cogs.leveling")
 
