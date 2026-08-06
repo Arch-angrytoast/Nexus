@@ -16,24 +16,75 @@ class Utility(commands.Cog):
         owner_id = os.getenv("OWNER_ID")
         return str(ctx.author.id) == str(owner_id)
 
-    @commands.hybrid_command(name="status", description="[OWNER] View bot connectivity and process status")
+    @commands.hybrid_command(name="status", description="[OWNER] View detailed bot and host status")
     async def status(self, ctx: commands.Context):
         if not self.is_owner(ctx):
             await ctx.send("Access denied.", ephemeral=True)
             return
 
-        latency = round(self.bot.latency * 1000)
-        cpu_usage = self.process.cpu_percent()
-        ram_usage = self.process.memory_info().rss / 1024 / 1024 # MB
+        # System & Host Resources
+        import platform
+        import time
 
-        content = f"**🟢 WebSocket Latency:** {latency}ms\n"
-        content += f"**🖥️ CPU Usage:** {cpu_usage}%\n"
-        content += f"**🧠 RAM Usage:** {ram_usage:.2f} MB\n"
-        content += f"**🌐 Cached Users:** {len(self.bot.users)}\n"
-        content += f"**🏠 Connected Guilds:** {len(self.bot.guilds)}"
+        # CPU
+        bot_cpu = self.process.cpu_percent()
+        sys_cpu = psutil.cpu_percent()
 
-        embed = embed_factory.create_clean_embed("🤖 Bot Status", content)
-        await ctx.send(embed=embed, ephemeral=True)
+        # Memory
+        mem = psutil.virtual_memory()
+        bot_ram_mb = self.process.memory_info().rss / 1024 / 1024
+        total_ram_gb = mem.total / (1024**3)
+        used_ram_gb = mem.used / (1024**3)
+
+        host_os = f"{platform.system()} {platform.release()}"
+
+        # Performance & Uptime
+        now = datetime.datetime.now(datetime.timezone.utc)
+        uptime_delta = now - self.start_time
+        days, remainder = divmod(int(uptime_delta.total_seconds()), 86400)
+        hours, remainder = divmod(remainder, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{days}d {hours}h {minutes}m"
+
+        ws_latency = round(self.bot.latency * 1000)
+
+        # API Latency calculation
+        api_start = time.perf_counter()
+        msg = await ctx.send("Pinging API...", ephemeral=True)
+        api_end = time.perf_counter()
+        api_latency = round((api_end - api_start) * 1000)
+
+        # DB Latency calculation
+        db_start = time.perf_counter()
+        try:
+            cursor = self.bot.db_conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            db_end = time.perf_counter()
+            db_latency = round((db_end - db_start) * 1000)
+            db_status = f"🟢 Healthy ({db_latency}ms)"
+        except Exception as e:
+            db_status = f"🔴 Offline/Error"
+
+        # Scale & Analytics
+        guilds = len(self.bot.guilds)
+        users = sum(g.member_count for g in self.bot.guilds if g.member_count)
+        channels = sum(len(g.channels) for g in self.bot.guilds)
+        shard_info = f"Shard {self.bot.shard_id or 0} of {self.bot.shard_count or 1}"
+
+        # Environment Specs
+        py_ver = platform.python_version()
+        dpy_ver = discord.__version__
+
+        # Build Embed
+        embed = embed_factory.create_clean_embed("🤖 System Status", "")
+
+        embed.add_field(name="💻 System & Host", value=f"**OS:** {host_os}\n**CPU (Bot):** {bot_cpu}% | **(Sys):** {sys_cpu}%\n**RAM (Bot):** {bot_ram_mb:.2f} MB\n**RAM (Sys):** {used_ram_gb:.2f}GB / {total_ram_gb:.2f}GB", inline=False)
+        embed.add_field(name="⏱️ Performance", value=f"**Uptime:** {uptime_str}\n**WebSocket Ping:** {ws_latency}ms\n**API Latency:** {api_latency}ms\n**Database:** {db_status}", inline=False)
+        embed.add_field(name="📈 Scale & Analytics", value=f"**Servers:** {guilds}\n**Users:** {users:,}\n**Channels:** {channels:,}\n**Shards:** {shard_info}", inline=False)
+        embed.add_field(name="🛠️ Environment", value=f"**Python:** v{py_ver}\n**Library:** discord.py v{dpy_ver}", inline=False)
+
+        await msg.edit(content=None, embed=embed)
 
     @commands.hybrid_command(name="uptime", description="[OWNER] View how long the bot has been online")
     async def uptime(self, ctx: commands.Context):

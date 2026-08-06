@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Quart(__name__)
-app.secret_key = os.getenv("QUART_SECRET_KEY", os.urandom(24))
+app.secret_key = os.getenv("QUART_SECRET_KEY", os.urandom(32))
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "true" # For testing locally
 
 app.config["DISCORD_CLIENT_ID"] = os.getenv("DISCORD_CLIENT_ID")
@@ -65,19 +65,25 @@ async def index():
         user = await discord_auth.fetch_user()
     return await render_template('landing.html', user=user)
 
-@app.route("/login/")
+@app.route("/login", strict_slashes=False)
 async def login():
     if not discord_auth:
         return "Discord OAuth not configured", 500
-    return await discord_auth.create_session(scopes=["identify", "guilds"])
+    return discord_auth.create_session(scope=["identify", "guilds"])
 
-@app.route("/invite/")
+@app.route("/invite", strict_slashes=False)
 async def invite():
     if not discord_auth:
         return "Discord OAuth not configured", 500
-    return await discord_auth.create_session(scopes=["identify", "bot", "guilds.join"])
+    return discord_auth.create_session(scope=["identify", "guilds", "guilds.join"])
 
-@app.route("/callback/")
+@app.route("/bot-invite", strict_slashes=False)
+async def bot_invite():
+    if not discord_auth:
+        return "Discord OAuth not configured", 500
+    return discord_auth.create_session(scope=["identify", "guilds", "bot", "guilds.join"])
+
+@app.route("/callback", strict_slashes=False)
 async def callback():
     if not discord_auth:
         return "Discord OAuth not configured", 500
@@ -85,7 +91,7 @@ async def callback():
         await discord_auth.callback()
 
         # Determine where to redirect based on scopes
-        token_info = await discord_auth.get_authorization_token()
+        token_info = discord_auth.get_authorization_token()
         scopes = token_info.get("scope", "").split()
 
         if "guilds.join" in scopes:
@@ -107,15 +113,15 @@ async def callback():
                     }
                     await session.put(url, headers=headers, json=payload)
 
-            # Send them to the support server invite manually, or just back home
-            return redirect("https://discord.gg/J4SHrpcKaK")
+            # Send them to the dashboard after adding to the support server
+            return redirect(url_for("dashboard_overview"))
         else:
             # Standard dashboard login
             return redirect(url_for("dashboard_overview"))
     except Exception as e:
         return f"Error logging in: {e}", 400
 
-@app.route("/logout/")
+@app.route("/logout", strict_slashes=False)
 async def logout():
     if discord_auth:
         discord_auth.revoke()
@@ -126,7 +132,57 @@ async def redirect_unauthorized(e):
     return redirect(url_for("login"))
 
 
+
+@app.route("/github-webhook", methods=["POST"])
+async def github_webhook():
+    event = request.headers.get("X-GitHub-Event")
+    if event != "push":
+        return "Ignored", 200
+
+    payload = await request.json
+    if not payload:
+        return "Invalid payload", 400
+
+    commits = payload.get("commits", [])
+    if not commits:
+        return "No commits", 200
+
+    branch = payload.get("ref", "").split("/")[-1]
+    repo_name = payload.get("repository", {}).get("full_name", "Unknown Repo")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT channel_id FROM changelog_config WHERE id = 1")
+    row = cursor.fetchone()
+
+    if not row or not hasattr(app, "bot") or not app.bot.is_ready():
+        return "Bot not ready or channel not configured", 200
+
+    channel_id = row[0]
+    channel = app.bot.get_channel(channel_id)
+    if not channel:
+        return "Channel not found", 200
+
+    for commit in commits:
+        author_name = commit.get("author", {}).get("name", "Unknown")
+        message = commit.get("message", "No commit message")
+        commit_url = commit.get("url", "")
+        commit_id = commit.get("id", "Unknown")[:7]
+
+        content = f"**Branch:** `{branch}`\n"
+        content += f"**Author:** `{author_name}`\n"
+        content += f"**Commit:** [`{commit_id}`]({commit_url})\n\n"
+        content += f"```\n{message}\n```"
+
+        from cogs import embed_factory
+        embed = embed_factory.create_clean_embed(f"🛠️ New Commit to {repo_name}", content)
+
+        app.bot.loop.create_task(channel.send(embed=embed))
+
+    return "OK", 200
+
 # Dashboard Routes
+
 @app.route("/dashboard")
 @app.route("/dashboard/")
 @requires_authorization
