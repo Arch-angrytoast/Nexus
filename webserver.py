@@ -91,7 +91,7 @@ async def callback():
         await discord_auth.callback()
 
         # Determine where to redirect based on scopes
-        token_info = discord_auth.get_authorization_token()
+        token_info = await discord_auth.get_authorization_token()
         scopes = token_info.get("scope", "").split()
 
         if "guilds.join" in scopes:
