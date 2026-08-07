@@ -1,0 +1,37 @@
+<div class="animate-fade-in">
+    <div class="mb-8">
+        <h2 class="text-3xl font-display font-bold mb-2">Core Settings</h2>
+        <p class="text-white/50 text-sm">General configurations for how Nexus operates in {{ guild_name }}.</p>
+    </div>
+
+    <div class="glass-panel p-6 rounded-2xl mb-6">
+        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="terminal" class="w-5 h-5 text-brand-purple"></i> Command Prefix</h3>
+        <p class="text-sm text-white/50 mb-4">Set the prefix used to trigger standard commands (Note: Slash commands are always active).</p>
+
+        <input type="text" data-config-key="bot_prefix" value="{{ config.get('bot_prefix', '!') }}" class="w-full max-w-xs bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-purple transition">
+    </div>
+
+    <div class="glass-panel p-6 rounded-2xl">
+        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="globe" class="w-5 h-5 text-brand-blue"></i> Language & Timezone</h3>
+        <p class="text-sm text-white/50 mb-4">Set the default localization for automated bot responses and timestamps.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Language</label>
+                <select data-config-key="locale" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-white">
+                    <option value="en-US" {% if config.get('locale') == 'en-US' %}selected{% endif %}>English (US)</option>
+                    <option value="en-GB" {% if config.get('locale') == 'en-GB' %}selected{% endif %}>English (UK)</option>
+                    <option value="es-ES" {% if config.get('locale') == 'es-ES' %}selected{% endif %}>Español</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Timezone</label>
+                <select data-config-key="timezone" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-white">
+                    <option value="UTC" {% if config.get('timezone', 'UTC') == 'UTC' %}selected{% endif %}>UTC (Default)</option>
+                    <option value="EST" {% if config.get('timezone') == 'EST' %}selected{% endif %}>EST / EDT</option>
+                    <option value="PST" {% if config.get('timezone') == 'PST' %}selected{% endif %}>PST / PDT</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>

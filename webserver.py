@@ -1,13 +1,12 @@
 import os
 import sqlite3
-import asyncio
-from quart import Quart, redirect, url_for, render_template, request, send_from_directory
+import datetime
+from quart import Quart, render_template, request, redirect, url_for, send_from_directory, jsonify
 from quart_discord import DiscordOAuth2Session, requires_authorization, Unauthorized
-from dotenv import load_dotenv
-
-load_dotenv()
+from functools import wraps
 
 app = Quart(__name__)
+
 app.secret_key = os.getenv("QUART_SECRET_KEY", os.urandom(32))
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "true" # For testing locally
 
@@ -15,12 +14,12 @@ app.config["DISCORD_CLIENT_ID"] = os.getenv("DISCORD_CLIENT_ID")
 app.config["DISCORD_CLIENT_SECRET"] = os.getenv("DISCORD_CLIENT_SECRET")
 app.config["DISCORD_REDIRECT_URI"] = os.getenv("OAUTH_REDIRECT_URI", "http://78.154.103.22:12166/callback")
 
-SUPPORT_SERVER_ID = 1519633747559841844
+SUPPORT_SERVER_ID = os.getenv("SUPPORT_SERVER_ID", "1519633747559841844")
 
-try:
+# Only initialize discord auth if client ID is set
+if app.config["DISCORD_CLIENT_ID"]:
     discord_auth = DiscordOAuth2Session(app)
-except Exception as e:
-    print(f"Failed to initialize Discord OAuth (Missing creds?): {e}")
+else:
     discord_auth = None
 
 def get_db():
@@ -28,35 +27,55 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
-async def is_authorized():
-    try:
-        # 1. Check if user is the Bot Owner
-        user = await discord_auth.fetch_user()
-        if str(user.id) == os.getenv("OWNER_ID"):
+def log_audit(guild_id, user_id, user_name, action):
+    conn = get_db()
+    cursor = conn.cursor()
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    cursor.execute("INSERT INTO dashboard_audit_logs (guild_id, user_id, user_name, action, timestamp) VALUES (?, ?, ?, ?, ?)",
+                   (guild_id, user_id, user_name, action, now))
+    conn.commit()
+
+async def check_guild_auth(guild_id):
+    if not discord_auth:
+        return False
+
+    user = await discord_auth.fetch_user()
+
+    # 1. Bot Owner bypass
+    owner_id = os.getenv("OWNER_ID")
+    if str(user.id) == str(owner_id):
+        return True
+
+    # 2. Check if user is in the guild and has Manage Server/Admin natively
+    guilds = await discord_auth.fetch_guilds()
+    target_guild = next((g for g in guilds if str(g.id) == str(guild_id)), None)
+
+    if target_guild:
+        perms = getattr(target_guild, 'permissions', None)
+        if perms and (perms.administrator or perms.manage_guild):
             return True
 
-        # 2. Check if user has "Manage Server" or "Administrator" in the specific Project Nexus Server
-        user_guilds = await discord_auth.fetch_guilds()
-        for g in user_guilds:
-            if g.id == SUPPORT_SERVER_ID:
-                is_admin = getattr(g.permissions, 'administrator', False)
-                can_manage = getattr(g.permissions, 'manage_guild', False)
-                # Fallback to bitwise check if getattr fails for some reason
-                if not is_admin and not can_manage:
-                    try:
-                        perms_val = int(g.permissions.value)
-                        is_admin = (perms_val & 0x8) == 0x8
-                        can_manage = (perms_val & 0x20) == 0x20
-                    except:
-                        pass
+    # 3. Check Delegated Roles
+    # To check roles, we need the bot's cache since OAuth guilds don't return member roles by default,
+    # or we make an API call. For speed, we will use the bot's cache if the bot is in the server.
+    if hasattr(app, "bot") and app.bot.is_ready():
+        bot_guild = app.bot.get_guild(int(guild_id))
+        if bot_guild:
+            member = bot_guild.get_member(user.id)
+            if member:
+                conn = get_db()
+                cursor = conn.cursor()
+                cursor.execute("SELECT role_id FROM dashboard_permissions WHERE guild_id = ?", (str(guild_id),))
+                allowed_roles = [r[0] for r in cursor.fetchall()]
+                member_role_ids = [str(r.id) for r in member.roles]
 
-                if is_admin or can_manage:
-                    return True
+                # If they have ANY allowed role, let them in
+                for rid in allowed_roles:
+                    if rid in member_role_ids:
+                        return True
 
-        return False
-    except Exception as e:
-        print(f"Auth error: {e}")
-        return False
+    return False
+
 
 @app.route("/")
 async def index():
@@ -114,10 +133,10 @@ async def callback():
                     await session.put(url, headers=headers, json=payload)
 
             # Send them to the dashboard after adding to the support server
-            return redirect(url_for("dashboard_overview"))
+            return redirect(url_for("dashboard_selector"))
         else:
             # Standard dashboard login
-            return redirect(url_for("dashboard_overview"))
+            return redirect(url_for("dashboard_selector"))
     except Exception as e:
         return f"Error logging in: {e}", 400
 
@@ -132,7 +151,7 @@ async def redirect_unauthorized(e):
     return redirect(url_for("login"))
 
 
-
+# --- WEBHOOK ---
 @app.route("/github-webhook", methods=["POST"])
 async def github_webhook():
     event = request.headers.get("X-GitHub-Event")
@@ -181,182 +200,200 @@ async def github_webhook():
 
     return "OK", 200
 
-# Dashboard Routes
 
-@app.route("/dashboard")
-@app.route("/dashboard/")
+# --- NEW DASHBOARD ARCHITECTURE ---
+
+@app.route("/dashboard", strict_slashes=False)
 @requires_authorization
-async def dashboard_overview():
-    if not await is_authorized():
-        return "Unauthorized: You must be an Administrator in a server with the bot.", 403
+async def dashboard_selector():
+    user = await discord_auth.fetch_user()
+    guilds = await discord_auth.fetch_guilds()
+
+    owner_id = os.getenv("OWNER_ID")
+    is_owner = str(user.id) == str(owner_id)
+
+    bot_guild_ids = []
+    if hasattr(app, "bot") and app.bot.is_ready():
+        bot_guild_ids = [str(g.id) for g in app.bot.guilds]
+
+    display_guilds = []
+    for g in guilds:
+        perms = getattr(g, 'permissions', None)
+        has_manage = perms and (perms.administrator or perms.manage_guild)
+
+        # In a real app we'd also check database delegated permissions here for servers they don't own,
+        # but that requires API spam. So we only show servers they natively manage, OR the owner bypass.
+        if has_manage or is_owner:
+            display_guilds.append({
+                "id": str(g.id),
+                "name": g.name,
+                "icon_url": g.icon_url or "https://cdn.discordapp.com/embed/avatars/0.png",
+                "has_bot": str(g.id) in bot_guild_ids
+            })
+
+    return await render_template('server_selector.html', user=user, guilds=display_guilds)
+
+@app.route("/dashboard/<guild_id>/", strict_slashes=False)
+@requires_authorization
+async def dashboard_core(guild_id):
+    if not await check_guild_auth(guild_id):
+        return "Unauthorized: You do not have permission to manage this server.", 403
 
     user = await discord_auth.fetch_user()
-
-    server_count = len(app.bot.guilds) if hasattr(app, 'bot') and app.bot.is_ready() else 0
-    total_users = sum([g.member_count for g in app.bot.guilds if g.member_count]) if hasattr(app, 'bot') and app.bot.is_ready() else 0
+    guild = app.bot.get_guild(int(guild_id)) if hasattr(app, "bot") else None
+    guild_name = guild.name if guild else "Unknown Server"
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM warnings")
-    punishments = cursor.fetchone()[0]
+    cursor.execute("SELECT key, value FROM server_config WHERE guild_id = ?", (guild_id,))
+    rows = cursor.fetchall()
+    config = {r['key']: r['value'] for r in rows}
 
-    stats = {
-        "server_count": server_count,
-        "total_users": total_users,
-        "messages_logged": punishments * 42
-    }
-    return await render_template('dashboard.html', tab='overview', user=user, stats=stats)
+    return await render_template('dashboard_layout.html',
+                                 user=user,
+                                 guild_id=guild_id,
+                                 guild_name=guild_name,
+                                 tab='core',
+                                 config=config)
 
-
-@app.route("/dashboard/automod", methods=["GET", "POST"])
+@app.route("/dashboard/<guild_id>/modules", strict_slashes=False)
 @requires_authorization
-async def dashboard_automod():
-    if not await is_authorized():
+async def dashboard_modules(guild_id):
+    if not await check_guild_auth(guild_id):
         return "Unauthorized", 403
 
     user = await discord_auth.fetch_user()
-    conn = get_db()
-    cursor = conn.cursor()
-    keys = ['automod_spam', 'automod_invites', 'automod_english', 'automod_bot']
+    guild = app.bot.get_guild(int(guild_id)) if hasattr(app, "bot") else None
+    guild_name = guild.name if guild else "Unknown Server"
 
-    if request.method == "POST":
-        form = await request.form
-        for k in keys:
-            if k in form:
-                cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (k, form[k]))
-        conn.commit()
-        return redirect(url_for("dashboard_automod"))
-
-    cursor.execute("SELECT * FROM server_config WHERE key IN ({})".format(','.join(['?']*len(keys))), keys)
-    rows = cursor.fetchall()
-    config = {k: "1" for k in keys}
-    for r in rows:
-        config[r['key']] = r['value']
-
-    return await render_template('dashboard.html', tab='automod', user=user, config=config)
-
-
-@app.route("/dashboard/leveling")
-@requires_authorization
-async def dashboard_leveling():
-    if not await is_authorized():
-        return "Unauthorized", 403
-
-    user = await discord_auth.fetch_user()
     conn = get_db()
     cursor = conn.cursor()
 
-    keys = [
-        'xp_min', 'xp_max', 'xp_cooldown', 'leveling_whitelist', 'leveling_blacklist',
-        'leveling_role_blacklist', 'leveling_min_length', 'leveling_announcement_channel',
-        'leveling_custom_message', 'leveling_role_stacking'
-    ]
-    cursor.execute(f"SELECT * FROM server_config WHERE key IN ({','.join(['?']*len(keys))})", keys)
+    # Get Config
+    cursor.execute("SELECT key, value FROM server_config WHERE guild_id = ?", (guild_id,))
     rows = cursor.fetchall()
+    config = {r['key']: r['value'] for r in rows}
 
-    # Defaults
-    config = {
-        "xp_min": 15, "xp_max": 25, "xp_cooldown": 60, "leveling_whitelist": "", "leveling_blacklist": "",
-        "leveling_role_blacklist": "", "leveling_min_length": 5, "leveling_announcement_channel": "current",
-        "leveling_custom_message": "🎉 **{user}** just leveled up to **Level {level}**!", "leveling_role_stacking": "stack"
-    }
-
-    for r in rows:
-        if r['key'] in ['xp_min', 'xp_max', 'xp_cooldown', 'leveling_min_length']:
-            config[r['key']] = int(r['value'])
-        else:
-            config[r['key']] = str(r['value'])
-
-    cursor.execute("SELECT level, role_id FROM leveling_rewards ORDER BY level ASC")
+    # Leveling specific data
+    cursor.execute("SELECT level, role_id FROM leveling_rewards WHERE guild_id = ? ORDER BY level ASC", (guild_id,))
     rewards = cursor.fetchall()
 
-    cursor.execute("SELECT role_id, multiplier FROM leveling_multipliers")
+    cursor.execute("SELECT role_id, multiplier FROM leveling_multipliers WHERE guild_id = ?", (guild_id,))
     multipliers = cursor.fetchall()
 
-    # Fetch roles and channels from the bot
     roles = []
     channels = []
-    if hasattr(app, 'bot') and app.bot.is_ready() and app.bot.guilds:
-        guild = app.bot.guilds[0] # Assuming single-server project "Project Nexus"
+    if guild:
         roles = [{"id": str(r.id), "name": r.name} for r in guild.roles if not r.is_default()]
         channels = [{"id": str(c.id), "name": c.name} for c in guild.text_channels + guild.voice_channels]
 
-    # Helper function to check if an id is in a comma separated string
     def is_selected(id_str, csv_str):
-        return id_str in [x.strip() for x in csv_str.split(',') if x.strip()]
+        if not csv_str: return False
+        return id_str in [x.strip() for x in str(csv_str).split(',') if x.strip()]
 
-    return await render_template('dashboard.html', tab='leveling', user=user, config=config,
-                                 rewards=rewards, multipliers=multipliers,
-                                 roles=roles, channels=channels, is_selected=is_selected)
+    return await render_template('dashboard_layout.html',
+                                 user=user,
+                                 guild_id=guild_id,
+                                 guild_name=guild_name,
+                                 tab='modules',
+                                 config=config,
+                                 rewards=rewards,
+                                 multipliers=multipliers,
+                                 roles=roles,
+                                 channels=channels,
+                                 is_selected=is_selected)
 
-
-@app.route("/dashboard/leveling_settings", methods=["POST"])
+@app.route("/dashboard/<guild_id>/management", strict_slashes=False)
 @requires_authorization
-async def dashboard_leveling_settings():
-    if not await is_authorized():
+async def dashboard_management(guild_id):
+    if not await check_guild_auth(guild_id):
         return "Unauthorized", 403
 
-    form = await request.form
+    user = await discord_auth.fetch_user()
+    guild = app.bot.get_guild(int(guild_id)) if hasattr(app, "bot") else None
+    guild_name = guild.name if guild else "Unknown Server"
+
     conn = get_db()
     cursor = conn.cursor()
 
-    # Handle standard inputs
-    standard_keys = ['xp_min', 'xp_max', 'xp_cooldown', 'leveling_min_length', 'leveling_announcement_channel', 'leveling_custom_message', 'leveling_role_stacking']
-    for k in standard_keys:
-        if k in form:
-            cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (k, form[k]))
+    cursor.execute("SELECT role_id FROM dashboard_permissions WHERE guild_id = ?", (guild_id,))
+    perm_roles = cursor.fetchall()
 
-    # Handle multi-selects (Choices.js)
-    multi_keys = ['leveling_whitelist', 'leveling_blacklist', 'leveling_role_blacklist']
-    for k in multi_keys:
-        values = form.getlist(k)
-        # Combine into comma separated string
-        csv_value = ",".join(values)
-        cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (k, csv_value))
+    cursor.execute("SELECT user_name, action, timestamp FROM dashboard_audit_logs WHERE guild_id = ? ORDER BY id DESC LIMIT 50", (guild_id,))
+    logs = cursor.fetchall()
+
+    roles = []
+    if guild:
+        roles = [{"id": str(r.id), "name": r.name, "color": str(r.color)} for r in guild.roles if not r.is_default()]
+
+    return await render_template('dashboard_layout.html',
+                                 user=user,
+                                 guild_id=guild_id,
+                                 guild_name=guild_name,
+                                 tab='management',
+                                 perm_roles=perm_roles,
+                                 logs=logs,
+                                 roles=roles)
+
+# --- API ENDPOINTS FOR VANILLA JS ---
+
+@app.route("/api/dashboard/<guild_id>/save", methods=["POST"])
+@requires_authorization
+async def api_save_config(guild_id):
+    if not await check_guild_auth(guild_id):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    user = await discord_auth.fetch_user()
+    data = await request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    changes = []
+    for key, value in data.items():
+        cursor.execute("INSERT OR REPLACE INTO server_config (guild_id, key, value) VALUES (?, ?, ?)", (guild_id, key, str(value)))
+        changes.append(key)
 
     conn.commit()
-    return redirect(url_for("dashboard_leveling"))
 
-@app.route("/dashboard/leveling_multiplier_add", methods=["POST"])
+    if changes:
+        log_audit(guild_id, str(user.id), user.name, f"Updated configuration: {', '.join(changes)}")
+
+    return jsonify({"success": True})
+
+@app.route("/api/dashboard/<guild_id>/permissions", methods=["POST", "DELETE"])
 @requires_authorization
-async def dashboard_leveling_multiplier_add():
-    if not await is_authorized():
-        return "Unauthorized", 403
+async def api_permissions(guild_id):
+    if not await check_guild_auth(guild_id):
+        return jsonify({"error": "Unauthorized"}), 403
 
-    form = await request.form
-    role_id = form.get('role_id')
-    multiplier = form.get('multiplier')
+    user = await discord_auth.fetch_user()
+    data = await request.get_json()
+    role_id = data.get("role_id")
+    if not role_id:
+        return jsonify({"error": "Missing role_id"}), 400
 
-    if role_id and multiplier:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO leveling_multipliers (role_id, multiplier) VALUES (?, ?)", (str(role_id), float(multiplier)))
-        conn.commit()
+    conn = get_db()
+    cursor = conn.cursor()
 
-    return redirect(url_for("dashboard_leveling"))
+    if request.method == "POST":
+        cursor.execute("INSERT OR REPLACE INTO dashboard_permissions (guild_id, role_id) VALUES (?, ?)", (guild_id, role_id))
+        log_audit(guild_id, str(user.id), user.name, f"Granted dashboard access to Role ID: {role_id}")
+    else:
+        cursor.execute("DELETE FROM dashboard_permissions WHERE guild_id = ? AND role_id = ?", (guild_id, role_id))
+        log_audit(guild_id, str(user.id), user.name, f"Revoked dashboard access from Role ID: {role_id}")
 
-@app.route("/dashboard/leveling_multiplier_delete", methods=["POST"])
+    conn.commit()
+    return jsonify({"success": True})
+
+
+
+@app.route("/dashboard/<guild_id>/leveling_reward_add", methods=["POST"])
 @requires_authorization
-async def dashboard_leveling_multiplier_delete():
-    if not await is_authorized():
-        return "Unauthorized", 403
-
-    form = await request.form
-    role_id = form.get('role_id')
-
-    if role_id:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM leveling_multipliers WHERE role_id = ?", (str(role_id),))
-        conn.commit()
-
-    return redirect(url_for("dashboard_leveling"))
-
-
-@app.route("/dashboard/leveling_reward_add", methods=["POST"])
-@requires_authorization
-async def dashboard_leveling_reward_add():
-    if not await is_authorized():
+async def dashboard_leveling_reward_add(guild_id):
+    if not await check_guild_auth(guild_id):
         return "Unauthorized", 403
 
     form = await request.form
@@ -366,16 +403,16 @@ async def dashboard_leveling_reward_add():
     if level and role_id:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO leveling_rewards (level, role_id) VALUES (?, ?)", (level, str(role_id)))
+        cursor.execute("INSERT OR REPLACE INTO leveling_rewards (guild_id, level, role_id) VALUES (?, ?, ?)", (guild_id, level, str(role_id)))
         conn.commit()
 
-    return redirect(url_for("dashboard_leveling"))
+    return redirect(url_for("dashboard_modules", guild_id=guild_id))
 
 
-@app.route("/dashboard/leveling_reward_delete", methods=["POST"])
+@app.route("/dashboard/<guild_id>/leveling_reward_delete", methods=["POST"])
 @requires_authorization
-async def dashboard_leveling_reward_delete():
-    if not await is_authorized():
+async def dashboard_leveling_reward_delete(guild_id):
+    if not await check_guild_auth(guild_id):
         return "Unauthorized", 403
 
     form = await request.form
@@ -384,11 +421,45 @@ async def dashboard_leveling_reward_delete():
     if level:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM leveling_rewards WHERE level = ?", (level,))
+        cursor.execute("DELETE FROM leveling_rewards WHERE guild_id = ? AND level = ?", (guild_id, level))
         conn.commit()
 
-    return redirect(url_for("dashboard_leveling"))
+    return redirect(url_for("dashboard_modules", guild_id=guild_id))
 
+@app.route("/dashboard/<guild_id>/leveling_multiplier_add", methods=["POST"])
+@requires_authorization
+async def dashboard_leveling_multiplier_add(guild_id):
+    if not await check_guild_auth(guild_id):
+        return "Unauthorized", 403
+
+    form = await request.form
+    role_id = form.get('role_id')
+    multiplier = form.get('multiplier')
+
+    if role_id and multiplier:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO leveling_multipliers (guild_id, role_id, multiplier) VALUES (?, ?, ?)", (guild_id, str(role_id), float(multiplier)))
+        conn.commit()
+
+    return redirect(url_for("dashboard_modules", guild_id=guild_id))
+
+@app.route("/dashboard/<guild_id>/leveling_multiplier_delete", methods=["POST"])
+@requires_authorization
+async def dashboard_leveling_multiplier_delete(guild_id):
+    if not await check_guild_auth(guild_id):
+        return "Unauthorized", 403
+
+    form = await request.form
+    role_id = form.get('role_id')
+
+    if role_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM leveling_multipliers WHERE guild_id = ? AND role_id = ?", (guild_id, str(role_id)))
+        conn.commit()
+
+    return redirect(url_for("dashboard_modules", guild_id=guild_id))
 
 @app.route('/assets/<path:filename>')
 async def custom_static(filename):
