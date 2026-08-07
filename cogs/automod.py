@@ -17,9 +17,9 @@ class AutomodCog(commands.Cog):
         # For spam tracking: maps user_id to list of message timestamps
         self.spam_tracker = defaultdict(list)
 
-    def get_config(self, key: str):
+    def get_config(self, guild_id, key: str):
         cursor = self.bot.db_conn.cursor()
-        cursor.execute("SELECT value FROM server_config WHERE key = ?", (key,))
+        cursor.execute("SELECT value FROM server_config WHERE guild_id = ? AND key = ?", (str(guild_id), key))
         row = cursor.fetchone()
         return row[0] if row else None
 
@@ -99,14 +99,14 @@ class AutomodCog(commands.Cog):
             return
 
         content_lower = message.content.lower()
-        general_channel_id = self.get_config("general_channel")
-        spam_channel_id = self.get_config("spam_channel")
+        general_channel_id = self.get_config(str(message.guild.id), "general_channel")
+        spam_channel_id = self.get_config(str(message.guild.id), "spam_channel")
 
         is_general = str(message.channel.id) == str(general_channel_id)
         is_spam = str(message.channel.id) == str(spam_channel_id)
 
-        def is_enabled(key: str) -> bool:
-            val = self.get_config(key)
+        def is_enabled(key: str, gid: str = None) -> bool:
+            val = self.get_config(gid or str(message.guild.id), key)
             return val is None or val == "1" # Default to True
 
         # 1. Check Invites (Rule 3)

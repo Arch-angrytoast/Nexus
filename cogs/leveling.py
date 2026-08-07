@@ -23,14 +23,18 @@ class Leveling(commands.Cog):
         ''')
         self.bot.db_conn.execute('''
             CREATE TABLE IF NOT EXISTS leveling_rewards (
-                level INTEGER PRIMARY KEY,
-                role_id TEXT
+                guild_id TEXT,
+                level INTEGER,
+                role_id TEXT,
+                PRIMARY KEY (guild_id, level)
             )
         ''')
         self.bot.db_conn.execute('''
             CREATE TABLE IF NOT EXISTS leveling_multipliers (
-                role_id TEXT PRIMARY KEY,
-                multiplier REAL
+                guild_id TEXT,
+                role_id TEXT,
+                multiplier REAL,
+                PRIMARY KEY (guild_id, role_id)
             )
         ''')
         self.bot.db_conn.commit()
@@ -43,14 +47,19 @@ class Leveling(commands.Cog):
         # Perform one final sync on unload
         asyncio.create_task(self.sync_cache_to_db())
 
-    def get_xp_config(self):
+    def get_xp_config(self, guild_id=None):
         cursor = self.bot.db_conn.cursor()
         keys = [
             'xp_min', 'xp_max', 'xp_cooldown', 'leveling_whitelist', 'leveling_blacklist',
             'leveling_role_blacklist', 'leveling_min_length', 'leveling_announcement_channel',
             'leveling_custom_message', 'leveling_role_stacking'
         ]
-        cursor.execute(f"SELECT key, value FROM server_config WHERE key IN ({','.join(['?']*len(keys))})", keys)
+        if guild_id:
+            query = f"SELECT key, value FROM server_config WHERE key IN ({','.join(['?']*len(keys))}) AND guild_id = ?"
+            cursor.execute(query, keys + [str(guild_id)])
+        else:
+            query = f"SELECT key, value FROM server_config WHERE key IN ({','.join(['?']*len(keys))})"
+            cursor.execute(query, keys)
         rows = cursor.fetchall()
 
         config = {
@@ -65,14 +74,14 @@ class Leveling(commands.Cog):
                 config[r[0]] = str(r[1])
         return config
 
-    def get_rewards(self):
+    def get_rewards(self, guild_id):
         cursor = self.bot.db_conn.cursor()
-        cursor.execute("SELECT level, role_id FROM leveling_rewards ORDER BY level ASC")
+        cursor.execute("SELECT level, role_id FROM leveling_rewards WHERE guild_id = ? ORDER BY level ASC", (str(guild_id),))
         return cursor.fetchall()
 
-    def get_multipliers(self):
+    def get_multipliers(self, guild_id):
         cursor = self.bot.db_conn.cursor()
-        cursor.execute("SELECT role_id, multiplier FROM leveling_multipliers")
+        cursor.execute("SELECT role_id, multiplier FROM leveling_multipliers WHERE guild_id = ?", (str(guild_id),))
         return {r[0]: r[1] for r in cursor.fetchall()}
 
     def calc_xp_for_level(self, level):
@@ -110,7 +119,7 @@ class Leveling(commands.Cog):
     def calculate_xp_gain(self, member, config):
         import random
         base_xp = random.randint(config['xp_min'], config['xp_max'])
-        multipliers = self.get_multipliers()
+        multipliers = self.get_multipliers(str(member.guild.id))
         highest_multiplier = 1.0
         for role in member.roles:
             if str(role.id) in multipliers:
@@ -171,7 +180,7 @@ class Leveling(commands.Cog):
         if message.author.bot or not message.guild:
             return
 
-        config = self.get_xp_config()
+        config = self.get_xp_config(str(guild.id))
 
         if len(message.content) < config['leveling_min_length']:
             return
@@ -184,7 +193,7 @@ class Leveling(commands.Cog):
 
     @tasks.loop(minutes=5.0)
     async def voice_xp_loop(self):
-        config = self.get_xp_config()
+        # Fetch config inside the loop per guild
         for guild in self.bot.guilds:
             for vc in guild.voice_channels:
                 # Need at least 2 people in VC to gain XP
@@ -192,6 +201,7 @@ class Leveling(commands.Cog):
                 if len(valid_members) < 2:
                     continue
 
+                config = self.get_xp_config(str(guild.id))
                 for member in valid_members:
                     if not await self.check_permissions_and_cooldown(member, vc.id, config):
                         continue
@@ -215,7 +225,7 @@ class Leveling(commands.Cog):
 
     async def process_level_up(self, member, new_level, config, fallback_channel=None):
         # Apply Role Rewards
-        rewards = self.get_rewards()
+        rewards = self.get_rewards(str(member.guild.id))
         roles_to_add = []
         roles_to_remove = []
 
@@ -325,7 +335,7 @@ class Leveling(commands.Cog):
 
     @commands.hybrid_command(name="rewards", description="View all unlockable role rewards.")
     async def rewards_list(self, ctx):
-        rewards = self.get_rewards()
+        rewards = self.get_rewards(str(member.guild.id))
         if not rewards:
             return await ctx.send("There are no role rewards configured for this server yet.", ephemeral=True)
 
@@ -355,7 +365,7 @@ class Leveling(commands.Cog):
     async def xp_add(self, ctx, member: discord.Member, amount: int):
         if amount <= 0: return await ctx.send("Amount must be positive.", ephemeral=True)
         await self.sync_cache_to_db()
-        config = self.get_xp_config()
+        config = self.get_xp_config(str(ctx.guild.id))
         cursor = self.bot.db_conn.cursor()
 
         cursor.execute("SELECT xp FROM leveling_users WHERE user_id = ?", (member.id,))
@@ -416,7 +426,7 @@ class Leveling(commands.Cog):
     async def xp_set(self, ctx, member: discord.Member, amount: int):
         if amount < 0: return await ctx.send("Amount must be 0 or positive.", ephemeral=True)
         await self.sync_cache_to_db()
-        config = self.get_xp_config()
+        config = self.get_xp_config(str(ctx.guild.id))
         cursor = self.bot.db_conn.cursor()
 
         expected_level = 0
@@ -441,7 +451,7 @@ class Leveling(commands.Cog):
     async def level_set(self, ctx, member: discord.Member, level: int):
         if level < 0: return await ctx.send("Level must be 0 or positive.", ephemeral=True)
         await self.sync_cache_to_db()
-        config = self.get_xp_config()
+        config = self.get_xp_config(str(ctx.guild.id))
         cursor = self.bot.db_conn.cursor()
 
         # Give them the minimum XP for that level

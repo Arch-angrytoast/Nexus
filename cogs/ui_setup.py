@@ -21,7 +21,7 @@ class BannedWordsModal(discord.ui.Modal, title='Manage Banned Words'):
         cursor = self.db_conn.cursor()
         words_list = [w.strip().lower() for w in self.words_input.value.split(',') if w.strip()]
         clean_words = ", ".join(words_list)
-        cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", ("banned_words", clean_words))
+        cursor.execute("INSERT OR REPLACE INTO server_config (guild_id, key, value) VALUES (?, ?, ?)", (str(interaction.guild_id), "banned_words", clean_words))
         self.db_conn.commit()
 
         # Sync with Discord's Native Automod
@@ -105,7 +105,7 @@ class FilterToggleView(discord.ui.View):
             await interaction.response.defer()
             new_val = "0" if self.is_enabled(key) else "1"
             cursor = self.db_conn.cursor()
-            cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (key, new_val))
+            cursor.execute("INSERT OR REPLACE INTO server_config (guild_id, key, value) VALUES (?, ?, ?)", (str(interaction.guild_id), key, new_val))
             self.db_conn.commit()
 
             # If toggling banned words, sync state with Discord
@@ -149,7 +149,7 @@ class ChannelAssignSelect(discord.ui.ChannelSelect):
     async def callback(self, interaction: discord.Interaction):
         selected_channel = self.values[0]
         cursor = self.db_conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)", (self.config_key, str(selected_channel.id)))
+        cursor.execute("INSERT OR REPLACE INTO server_config (guild_id, key, value) VALUES (?, ?, ?)", (str(interaction.guild_id), self.config_key, str(selected_channel.id)))
         self.db_conn.commit()
 
         # Reset the view back to the main dropdown

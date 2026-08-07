@@ -49,8 +49,29 @@ def init_db():
     conn.commit()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS server_config (
-            key TEXT PRIMARY KEY,
-            value TEXT
+            guild_id TEXT,
+            key TEXT,
+            value TEXT,
+            PRIMARY KEY (guild_id, key)
+        )
+    ''')
+    conn.commit()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS dashboard_permissions (
+            guild_id TEXT,
+            role_id TEXT,
+            PRIMARY KEY (guild_id, role_id)
+        )
+    ''')
+    conn.commit()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS dashboard_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user_id TEXT,
+            user_name TEXT,
+            action TEXT,
+            timestamp TEXT
         )
     ''')
     conn.commit()

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="w-full text-white flex flex-col items-center relative z-10 min-h-screen selection:bg-brand-blue selection:text-white pb-20">
+
+    <!-- Top Nav -->
+    <nav class="w-full max-w-7xl p-6 md:p-8 flex justify-between items-center border-b border-white/5 mb-12">
+        <a href="/" class="flex items-center gap-3 hover:opacity-80 transition">
+            <img src="/assets/website_logo.png" alt="Logo" class="w-8 h-8 object-contain" />
+            <span class="text-xl font-display font-bold tracking-wide">Nexus</span>
+        </a>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-full border border-white/10">
+                <img src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png" class="w-6 h-6 rounded-full" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                <span class="text-sm font-medium">{{ user.name }}</span>
+            </div>
+            <a href="/logout" class="text-xs font-bold uppercase tracking-wider text-white/50 hover:text-white transition">Logout</a>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <div class="w-full max-w-5xl px-6 mb-12 text-center md:text-left">
+        <h1 class="text-4xl md:text-5xl font-display font-bold mb-4">Select a Server</h1>
+        <p class="text-white/50">Manage settings for servers where you have administrative access.</p>
+    </div>
+
+    <!-- Grid -->
+    <div class="w-full max-w-5xl px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for guild in guilds %}
+        <div class="glass-panel p-6 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:border-white/20 hover:bg-white/10 group relative overflow-hidden">
+            {% if guild.has_bot %}
+                <div class="absolute top-0 w-full h-1 bg-brand-blue"></div>
+            {% endif %}
+
+            <img src="{{ guild.icon_url }}" alt="{{ guild.name }}" class="w-20 h-20 rounded-2xl mb-4 shadow-lg object-cover bg-gray-800">
+
+            <h3 class="text-lg font-bold font-display truncate w-full mb-1">{{ guild.name }}</h3>
+
+            {% if guild.has_bot %}
+                <span class="text-xs font-medium text-brand-blue mb-6 px-2 py-1 bg-brand-blue/10 rounded-md">Bot Installed</span>
+                <a href="/dashboard/{{ guild.id }}/" class="w-full py-2.5 rounded-lg bg-white/10 hover:bg-white text-white hover:text-black font-bold transition flex justify-center items-center gap-2">
+                    Manage Server <i data-lucide="settings" class="w-4 h-4"></i>
+                </a>
+            {% else %}
+                <span class="text-xs font-medium text-white/30 mb-6 px-2 py-1 bg-white/5 rounded-md">Not Installed</span>
+                <a href="/bot-invite" class="w-full py-2.5 rounded-lg bg-brand-purple hover:bg-brand-purple/80 text-white font-bold transition flex justify-center items-center gap-2">
+                    Invite Nexus <i data-lucide="plus" class="w-4 h-4"></i>
+                </a>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="col-span-full py-12 text-center">
+            <i data-lucide="server-off" class="w-12 h-12 text-white/20 mx-auto mb-4"></i>
+            <h3 class="text-xl font-bold mb-2">No Manageable Servers Found</h3>
+            <p class="text-white/50 max-w-md mx-auto">You must have the "Manage Server" or "Administrator" permission in a server to configure Nexus.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

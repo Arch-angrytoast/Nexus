@@ -1,0 +1,95 @@
+<div class="animate-fade-in">
+    <div class="mb-8">
+        <h2 class="text-3xl font-display font-bold mb-2">Management</h2>
+        <p class="text-white/50 text-sm">Control dashboard access and view audit logs.</p>
+    </div>
+
+    <!-- Permissions -->
+    <div class="glass-panel p-6 rounded-2xl mb-6">
+        <h3 class="text-lg font-bold mb-1 flex items-center gap-2"><i data-lucide="key" class="w-5 h-5 text-yellow-500"></i> Dashboard Access Control</h3>
+        <p class="text-sm text-white/50 mb-6">By default, only users with 'Manage Server' or 'Administrator' can access this dashboard. You can delegate access to specific roles below.</p>
+
+        <div class="flex items-center gap-4 mb-6">
+            <select id="role-select" class="flex-1 bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-white">
+                <option value="">Select a role to grant access...</option>
+                {% for role in roles %}
+                    <option value="{{ role.id }}" style="color: {{ role.color }}">{{ role.name }}</option>
+                {% endfor %}
+            </select>
+            <button onclick="addPermission()" class="px-4 py-2 bg-brand-blue hover:bg-brand-blue/80 rounded-lg font-bold transition">Grant Access</button>
+        </div>
+
+        <div class="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
+            {% for perm in perm_roles %}
+                <div class="p-3 border-b border-white/5 flex justify-between items-center last:border-0">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="shield" class="w-4 h-4 text-white/30"></i>
+                        <span class="text-sm font-medium">Role ID: {{ perm[0] }}</span>
+                    </div>
+                    <button onclick="removePermission('{{ perm[0] }}')" class="text-red-400 hover:text-red-300 text-sm font-bold px-3 py-1 bg-red-400/10 rounded">Revoke</button>
+                </div>
+            {% else %}
+                <div class="p-4 text-center text-sm text-white/40">No delegated roles configured.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Audit Logs -->
+    <div class="glass-panel p-6 rounded-2xl">
+        <h3 class="text-lg font-bold mb-1 flex items-center gap-2"><i data-lucide="list" class="w-5 h-5 text-brand-blue"></i> Audit Logs</h3>
+        <p class="text-sm text-white/50 mb-6">Track who changed what settings on the dashboard.</p>
+
+        <div class="bg-black/30 rounded-xl border border-white/5 overflow-hidden max-h-[400px] overflow-y-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-white/5 text-white/40 uppercase text-xs tracking-wider sticky top-0">
+                    <tr>
+                        <th class="px-4 py-3">User</th>
+                        <th class="px-4 py-3">Action</th>
+                        <th class="px-4 py-3">Timestamp (UTC)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for log in logs %}
+                    <tr class="hover:bg-white/5 transition">
+                        <td class="px-4 py-3 font-medium">{{ log[0] }}</td>
+                        <td class="px-4 py-3 text-white/70">{{ log[1] }}</td>
+                        <td class="px-4 py-3 text-white/40 text-xs">{{ log[2].replace('T', ' ')[:19] }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="px-4 py-6 text-center text-white/40">No audit logs found for this server.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    async function addPermission() {
+        const roleId = document.getElementById('role-select').value;
+        if (!roleId) return alert("Select a role first.");
+
+        const res = await fetch(`/api/dashboard/{{ guild_id }}/permissions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role_id: roleId })
+        });
+        if (res.ok) location.reload();
+        else alert("Failed to grant permission.");
+    }
+
+    async function removePermission(roleId) {
+        if (!confirm("Revoke access for this role?")) return;
+
+        const res = await fetch(`/api/dashboard/{{ guild_id }}/permissions`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role_id: roleId })
+        });
+        if (res.ok) location.reload();
+        else alert("Failed to revoke permission.");
+    }
+</script>
