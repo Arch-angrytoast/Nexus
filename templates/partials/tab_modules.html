@@ -57,8 +57,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
 
                 <!-- Role Rewards -->
                 <div class="bg-black/30 p-4 rounded-xl border border-white/5 md:col-span-2">
@@ -117,13 +115,14 @@
                         {% endfor %}
                     </div>
                 </div>
+
                 <!-- Roles & Channels (Progressively Disclosed) -->
                 <div class="bg-black/30 p-4 rounded-xl border border-white/5 md:col-span-2">
                     <h4 class="font-bold mb-3 text-sm text-white/80">Role & Channel Configuration</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-white/40 uppercase mb-1">Leveling Whitelisted Channels</label>
-                            <select multiple data-config-key="leveling_whitelist" class="w-full js-choice bg-black border border-white/10 rounded-lg px-3 py-2 text-sm">
+                            <select multiple data-config-key="leveling_whitelist" class="w-full js-choice bg-black border border-white/10 rounded-lg px-3 py-2 text-sm h-32">
                                 {% for channel in channels %}
                                 <option value="{{ channel.id }}" {% if is_selected(channel.id, config.get('leveling_whitelist', '')) %}selected{% endif %}>#{{ channel.name }}</option>
                                 {% endfor %}
@@ -131,7 +130,7 @@
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-white/40 uppercase mb-1">Leveling Blacklisted Channels</label>
-                            <select multiple data-config-key="leveling_blacklist" class="w-full js-choice bg-black border border-white/10 rounded-lg px-3 py-2 text-sm">
+                            <select multiple data-config-key="leveling_blacklist" class="w-full js-choice bg-black border border-white/10 rounded-lg px-3 py-2 text-sm h-32">
                                 {% for channel in channels %}
                                 <option value="{{ channel.id }}" {% if is_selected(channel.id, config.get('leveling_blacklist', '')) %}selected{% endif %}>#{{ channel.name }}</option>
                                 {% endfor %}
@@ -139,6 +138,8 @@
                         </div>
                     </div>
                 </div>
+
+            </div>
 
         </div>
     </div>
@@ -151,7 +152,7 @@
         let parsed = input.replace('{user}', '<span class="bg-indigo-500/30 text-indigo-200 px-1 rounded">@{{ user.name }}</span>');
         parsed = parsed.replace('{level}', '<strong>5</strong>');
         // Simple bold parsing
-        parsed = parsed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        parsed = parsed.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
 
         document.getElementById('level-msg-preview').innerHTML = parsed;
     }
