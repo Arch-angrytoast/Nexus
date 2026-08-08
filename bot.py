@@ -12,6 +12,25 @@ PREFIX = os.getenv("COMMAND_PREFIX", "!")
 def init_db():
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
+
+    try:
+        cursor.execute("ALTER TABLE server_config ADD COLUMN guild_id TEXT DEFAULT '1519633747559841844'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE leveling_rewards ADD COLUMN guild_id TEXT DEFAULT '1519633747559841844'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE leveling_multipliers ADD COLUMN guild_id TEXT DEFAULT '1519633747559841844'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS joke_meters (
             meter_name TEXT PRIMARY KEY,
