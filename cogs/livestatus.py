@@ -83,7 +83,7 @@ class LiveStatus(commands.Cog):
         view = discord.ui.View(timeout=None)
         view.add_item(discord.ui.Button(label="Support Server", url="https://discord.gg/J4SHrpcKaK", style=discord.ButtonStyle.link))
         # Use our invite link that has OAuth joined logic
-        view.add_item(discord.ui.Button(label="Invite Bot", url="http://78.154.103.22:12166/bot-invite", style=discord.ButtonStyle.link))
+        view.add_item(discord.ui.Button(label="Invite Bot", url="https://nexuscore.wisp.uno/bot-invite", style=discord.ButtonStyle.link))
 
         return embed, view
 

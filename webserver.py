@@ -11,7 +11,7 @@ app.secret_key = os.getenv("QUART_SECRET_KEY", os.urandom(32))
 
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
-DISCORD_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "http://78.154.103.22:12166/callback")
+DISCORD_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "https://nexuscore.wisp.uno/callback")
 SUPPORT_SERVER_ID = os.getenv("SUPPORT_SERVER_ID", "1519633747559841844")
 API_BASE_URL = 'https://discord.com/api/v10'
 
@@ -139,6 +139,7 @@ async def callback():
     user_data = await fetch_user_data(access_token)
     if not user_data: return "Failed to fetch user data.", 400
 
+    session.permanent = True
     session["user"] = {
         "id": user_data["id"],
         "name": user_data.get("global_name") or user_data["username"],
@@ -391,6 +392,16 @@ async def github_webhook():
         app.bot.loop.create_task(channel.send(embed=embed))
 
     return "OK", 200
+
+
+@app.route('/api/preview_url', methods=['GET'])
+async def preview_url():
+    url = request.args.get('url')
+    if not url: return jsonify({"error": "No url"}), 400
+
+    # In a real app we'd fetch OpenGraph meta tags, but here we can just do a very basic validation/return
+    # This is a stub to make the JS embed work nicely if requested
+    return jsonify({"url": url})
 
 @app.route('/assets/<path:filename>')
 async def custom_static(filename):
