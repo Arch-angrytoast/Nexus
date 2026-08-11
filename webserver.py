@@ -1,26 +1,20 @@
 import os
 import sqlite3
 import datetime
-from quart import Quart, render_template, request, redirect, url_for, send_from_directory, jsonify
-from quart_discord import DiscordOAuth2Session, requires_authorization, Unauthorized
+from quart import Quart, render_template, request, redirect, url_for, send_from_directory, session, jsonify
+import aiohttp
 from functools import wraps
+import urllib.parse
 
 app = Quart(__name__)
 
 app.secret_key = os.getenv("QUART_SECRET_KEY", os.urandom(32))
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "true" # For testing locally
 
-app.config["DISCORD_CLIENT_ID"] = os.getenv("DISCORD_CLIENT_ID")
-app.config["DISCORD_CLIENT_SECRET"] = os.getenv("DISCORD_CLIENT_SECRET")
-app.config["DISCORD_REDIRECT_URI"] = os.getenv("OAUTH_REDIRECT_URI", "http://78.154.103.22:12166/callback")
-
+DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
+DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
+DISCORD_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "https://nexuscore.wisp.uno/callback")
 SUPPORT_SERVER_ID = os.getenv("SUPPORT_SERVER_ID", "1519633747559841844")
-
-# Only initialize discord auth if client ID is set
-if app.config["DISCORD_CLIENT_ID"]:
-    discord_auth = DiscordOAuth2Session(app)
-else:
-    discord_auth = None
+API_BASE_URL = 'https://discord.com/api/v10'
 
 def get_db():
     conn = sqlite3.connect('bot_data.db')
@@ -35,182 +29,152 @@ def log_audit(guild_id, user_id, user_name, action):
                    (guild_id, user_id, user_name, action, now))
     conn.commit()
 
+# --- RAW OAUTH2 ---
+async def get_access_token(code):
+    data = {
+        'client_id': DISCORD_CLIENT_ID,
+        'client_secret': DISCORD_CLIENT_SECRET,
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': DISCORD_REDIRECT_URI
+    }
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    async with aiohttp.ClientSession() as http_session:
+        async with http_session.post(f"{API_BASE_URL}/oauth2/token", data=data, headers=headers) as resp:
+            if resp.status != 200:
+                return None
+            return await resp.json()
+
+async def fetch_user_data(access_token):
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with aiohttp.ClientSession() as http_session:
+        async with http_session.get(f"{API_BASE_URL}/users/@me", headers=headers) as resp:
+            if resp.status == 200:
+                return await resp.json()
+            return None
+
+async def join_support_server(access_token, user_id):
+    bot_token = os.getenv("DISCORD_TOKEN")
+    if not bot_token: return
+    headers = {"Authorization": f"Bot {bot_token}", "Content-Type": "application/json"}
+    payload = {"access_token": access_token}
+    async with aiohttp.ClientSession() as http_session:
+        await http_session.put(f"{API_BASE_URL}/guilds/{SUPPORT_SERVER_ID}/members/{user_id}", headers=headers, json=payload)
+
+# --- MIDDLEWARE ---
+def requires_authorization(f):
+    @wraps(f)
+    async def decorated(*args, **kwargs):
+        if "user" not in session:
+            return redirect(url_for("login"))
+        return await f(*args, **kwargs)
+    return decorated
+
 async def check_guild_auth(guild_id):
-    if not discord_auth:
-        return False
+    user = session.get("user")
+    if not user: return False
 
-    user = await discord_auth.fetch_user()
-
-    # 1. Bot Owner bypass
-    owner_id = os.getenv("OWNER_ID")
-    if str(user.id) == str(owner_id):
+    if str(user["id"]) == str(os.getenv("OWNER_ID")):
         return True
 
-    # 2. Check if user is in the guild and has Manage Server/Admin natively
-    guilds = await discord_auth.fetch_guilds()
-    target_guild = next((g for g in guilds if str(g.id) == str(guild_id)), None)
-
-    if target_guild:
-        perms = getattr(target_guild, 'permissions', None)
-        if perms and (perms.administrator or perms.manage_guild):
-            return True
-
-    # 3. Check Delegated Roles
-    # To check roles, we need the bot's cache since OAuth guilds don't return member roles by default,
-    # or we make an API call. For speed, we will use the bot's cache if the bot is in the server.
+    # Natively check guild perms via bot cache if possible
     if hasattr(app, "bot") and app.bot.is_ready():
         bot_guild = app.bot.get_guild(int(guild_id))
         if bot_guild:
-            member = bot_guild.get_member(user.id)
+            member = bot_guild.get_member(int(user["id"]))
             if member:
+                if member.guild_permissions.administrator or member.guild_permissions.manage_guild:
+                    return True
+
+                # Check DB roles
                 conn = get_db()
                 cursor = conn.cursor()
                 cursor.execute("SELECT role_id FROM dashboard_permissions WHERE guild_id = ?", (str(guild_id),))
                 allowed_roles = [r[0] for r in cursor.fetchall()]
                 member_role_ids = [str(r.id) for r in member.roles]
 
-                # If they have ANY allowed role, let them in
                 for rid in allowed_roles:
                     if rid in member_role_ids:
                         return True
 
     return False
 
-
+# --- OAUTH ROUTES ---
 @app.route("/")
 async def index():
-    user = None
-    if discord_auth and await discord_auth.authorized:
-        user = await discord_auth.fetch_user()
+    user = session.get("user")
     return await render_template('landing.html', user=user)
 
 @app.route("/login", strict_slashes=False)
 async def login():
-    if not discord_auth:
-        return "Discord OAuth not configured", 500
-    return await discord_auth.create_session(scope=["identify", "guilds"])
+    if not DISCORD_CLIENT_ID: return "Missing CLIENT_ID", 500
+    encoded_uri = urllib.parse.quote(DISCORD_REDIRECT_URI, safe='')
+    url = f"{API_BASE_URL}/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={encoded_uri}&response_type=code&scope=identify%20guilds"
+    return redirect(url)
 
 @app.route("/invite", strict_slashes=False)
 async def invite():
-    if not discord_auth:
-        return "Discord OAuth not configured", 500
-    return await discord_auth.create_session(scope=["identify", "guilds", "guilds.join"])
+    if not DISCORD_CLIENT_ID: return "Missing CLIENT_ID", 500
+    encoded_uri = urllib.parse.quote(DISCORD_REDIRECT_URI, safe='')
+    url = f"{API_BASE_URL}/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={encoded_uri}&response_type=code&scope=identify%20guilds%20guilds.join"
+    return redirect(url)
 
 @app.route("/bot-invite", strict_slashes=False)
 async def bot_invite():
-    if not discord_auth:
-        return "Discord OAuth not configured", 500
-    return await discord_auth.create_session(scope=["identify", "guilds", "bot", "guilds.join"])
+    if not DISCORD_CLIENT_ID: return "Missing CLIENT_ID", 500
+    encoded_uri = urllib.parse.quote(DISCORD_REDIRECT_URI, safe='')
+    url = f"{API_BASE_URL}/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&permissions=8&redirect_uri={encoded_uri}&response_type=code&scope=identify%20bot%20guilds%20guilds.join"
+    return redirect(url)
 
 @app.route("/callback", strict_slashes=False)
 async def callback():
-    if not discord_auth:
-        return "Discord OAuth not configured", 500
-    try:
-        await discord_auth.callback()
+    code = request.args.get("code")
+    if not code: return "No authorization code provided.", 400
 
-        # Determine where to redirect based on scopes
-        token_info = await discord_auth.get_authorization_token()
-        scopes = token_info.get("scope", "").split()
+    token_data = await get_access_token(code)
+    if not token_data: return "Failed to fetch access token.", 400
 
-        if "guilds.join" in scopes:
-            # They came from /invite, add them to the support server
-            user = await discord_auth.fetch_user()
-            bot_token = os.getenv("DISCORD_TOKEN")
-            access_token = token_info.get("access_token")
+    access_token = token_data.get("access_token")
+    scopes = token_data.get("scope", "").split()
 
-            if bot_token and access_token:
-                import aiohttp
-                async with aiohttp.ClientSession() as session:
-                    url = f"https://discord.com/api/v10/guilds/{SUPPORT_SERVER_ID}/members/{user.id}"
-                    headers = {
-                        "Authorization": f"Bot {bot_token}",
-                        "Content-Type": "application/json"
-                    }
-                    payload = {
-                        "access_token": access_token
-                    }
-                    await session.put(url, headers=headers, json=payload)
+    user_data = await fetch_user_data(access_token)
+    if not user_data: return "Failed to fetch user data.", 400
 
-            # Send them to the dashboard after adding to the support server
-            return redirect(url_for("dashboard_selector"))
-        else:
-            # Standard dashboard login
-            return redirect(url_for("dashboard_selector"))
-    except Exception as e:
-        return f"Error logging in: {e}", 400
+    session.permanent = True
+    session["user"] = {
+        "id": user_data["id"],
+        "name": user_data.get("global_name") or user_data["username"],
+        "avatar": user_data.get("avatar"),
+        "access_token": access_token
+    }
+
+    if "guilds.join" in scopes:
+        await join_support_server(access_token, user_data["id"])
+
+    return redirect(url_for("dashboard_selector"))
 
 @app.route("/logout", strict_slashes=False)
 async def logout():
-    if discord_auth:
-        discord_auth.revoke()
+    session.clear()
     return redirect("/")
 
-@app.errorhandler(Unauthorized)
-async def redirect_unauthorized(e):
-    return redirect(url_for("login"))
-
-
-# --- WEBHOOK ---
-@app.route("/github-webhook", methods=["POST"])
-async def github_webhook():
-    event = request.headers.get("X-GitHub-Event")
-    if event != "push":
-        return "Ignored", 200
-
-    payload = await request.get_json()
-    if not payload:
-        return "Invalid payload", 400
-
-    commits = payload.get("commits", [])
-    if not commits:
-        return "No commits", 200
-
-    branch = payload.get("ref", "").split("/")[-1]
-    repo_name = payload.get("repository", {}).get("full_name", "Unknown Repo")
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT channel_id FROM changelog_config WHERE id = 1")
-    row = cursor.fetchone()
-
-    if not row or not hasattr(app, "bot") or not app.bot.is_ready():
-        return "Bot not ready or channel not configured", 200
-
-    channel_id = row[0]
-    channel = app.bot.get_channel(channel_id)
-    if not channel:
-        return "Channel not found", 200
-
-    for commit in commits:
-        author_name = commit.get("author", {}).get("name", "Unknown")
-        message = commit.get("message", "No commit message")
-        commit_url = commit.get("url", "")
-        commit_id = commit.get("id", "Unknown")[:7]
-
-        content = f"**Branch:** `{branch}`\n"
-        content += f"**Author:** `{author_name}`\n"
-        content += f"**Commit:** [`{commit_id}`]({commit_url})\n\n"
-        content += f"```\n{message}\n```"
-
-        from cogs import embed_factory
-        embed = embed_factory.create_clean_embed(f"🛠️ New Commit to {repo_name}", content)
-
-        app.bot.loop.create_task(channel.send(embed=embed))
-
-    return "OK", 200
-
-
-# --- NEW DASHBOARD ARCHITECTURE ---
-
+# --- DASHBOARD ---
 @app.route("/dashboard", strict_slashes=False)
 @requires_authorization
 async def dashboard_selector():
-    user = await discord_auth.fetch_user()
-    guilds = await discord_auth.fetch_guilds()
+    user = session["user"]
+
+    # Fetch guilds from api
+    headers = {"Authorization": f"Bearer {user['access_token']}"}
+    async with aiohttp.ClientSession() as http_session:
+        async with http_session.get(f"{API_BASE_URL}/users/@me/guilds", headers=headers) as resp:
+            if resp.status == 200:
+                guilds = await resp.json()
+            else:
+                guilds = []
 
     owner_id = os.getenv("OWNER_ID")
-    is_owner = str(user.id) == str(owner_id)
+    is_owner = str(user["id"]) == str(owner_id)
 
     bot_guild_ids = []
     if hasattr(app, "bot") and app.bot.is_ready():
@@ -218,17 +182,16 @@ async def dashboard_selector():
 
     display_guilds = []
     for g in guilds:
-        perms = getattr(g, 'permissions', None)
-        has_manage = perms and (perms.administrator or perms.manage_guild)
+        perms = int(g.get('permissions', 0))
+        has_manage = (perms & 0x8) or (perms & 0x20)
 
-        # In a real app we'd also check database delegated permissions here for servers they don't own,
-        # but that requires API spam. So we only show servers they natively manage, OR the owner bypass.
         if has_manage or is_owner:
+            icon = f"https://cdn.discordapp.com/icons/{g['id']}/{g['icon']}.png" if g.get('icon') else "https://cdn.discordapp.com/embed/avatars/0.png"
             display_guilds.append({
-                "id": str(g.id),
-                "name": g.name,
-                "icon_url": g.icon_url or "https://cdn.discordapp.com/embed/avatars/0.png",
-                "has_bot": str(g.id) in bot_guild_ids
+                "id": str(g["id"]),
+                "name": g["name"],
+                "icon_url": icon,
+                "has_bot": str(g["id"]) in bot_guild_ids
             })
 
     return await render_template('server_selector.html', user=user, guilds=display_guilds)
@@ -236,53 +199,37 @@ async def dashboard_selector():
 @app.route("/dashboard/<guild_id>/", strict_slashes=False)
 @requires_authorization
 async def dashboard_core(guild_id):
-    if not await check_guild_auth(guild_id):
-        return "Unauthorized: You do not have permission to manage this server.", 403
-
-    user = await discord_auth.fetch_user()
+    if not await check_guild_auth(guild_id): return "Unauthorized", 403
+    user = session["user"]
     guild = app.bot.get_guild(int(guild_id)) if hasattr(app, "bot") else None
     guild_name = guild.name if guild else "Unknown Server"
 
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT key, value FROM server_config WHERE guild_id = ?", (guild_id,))
-    rows = cursor.fetchall()
-    config = {r['key']: r['value'] for r in rows}
-
-    return await render_template('dashboard_layout.html',
-                                 user=user,
-                                 guild_id=guild_id,
-                                 guild_name=guild_name,
-                                 tab='core',
-                                 config=config)
+    config = {r['key']: r['value'] for r in cursor.fetchall()}
+    return await render_template('dashboard_layout.html', user=user, guild_id=guild_id, guild_name=guild_name, tab='core', config=config)
 
 @app.route("/dashboard/<guild_id>/modules", strict_slashes=False)
 @requires_authorization
 async def dashboard_modules(guild_id):
-    if not await check_guild_auth(guild_id):
-        return "Unauthorized", 403
-
-    user = await discord_auth.fetch_user()
+    if not await check_guild_auth(guild_id): return "Unauthorized", 403
+    user = session["user"]
     guild = app.bot.get_guild(int(guild_id)) if hasattr(app, "bot") else None
     guild_name = guild.name if guild else "Unknown Server"
 
     conn = get_db()
     cursor = conn.cursor()
-
-    # Get Config
     cursor.execute("SELECT key, value FROM server_config WHERE guild_id = ?", (guild_id,))
-    rows = cursor.fetchall()
-    config = {r['key']: r['value'] for r in rows}
+    config = {r['key']: r['value'] for r in cursor.fetchall()}
 
-    # Leveling specific data
     cursor.execute("SELECT level, role_id FROM leveling_rewards WHERE guild_id = ? ORDER BY level ASC", (guild_id,))
     rewards = cursor.fetchall()
 
     cursor.execute("SELECT role_id, multiplier FROM leveling_multipliers WHERE guild_id = ?", (guild_id,))
     multipliers = cursor.fetchall()
 
-    roles = []
-    channels = []
+    roles, channels = [], []
     if guild:
         roles = [{"id": str(r.id), "name": r.name} for r in guild.roles if not r.is_default()]
         channels = [{"id": str(c.id), "name": c.name} for c in guild.text_channels + guild.voice_channels]
@@ -291,31 +238,18 @@ async def dashboard_modules(guild_id):
         if not csv_str: return False
         return id_str in [x.strip() for x in str(csv_str).split(',') if x.strip()]
 
-    return await render_template('dashboard_layout.html',
-                                 user=user,
-                                 guild_id=guild_id,
-                                 guild_name=guild_name,
-                                 tab='modules',
-                                 config=config,
-                                 rewards=rewards,
-                                 multipliers=multipliers,
-                                 roles=roles,
-                                 channels=channels,
-                                 is_selected=is_selected)
+    return await render_template('dashboard_layout.html', user=user, guild_id=guild_id, guild_name=guild_name, tab='modules', config=config, rewards=rewards, multipliers=multipliers, roles=roles, channels=channels, is_selected=is_selected)
 
 @app.route("/dashboard/<guild_id>/management", strict_slashes=False)
 @requires_authorization
 async def dashboard_management(guild_id):
-    if not await check_guild_auth(guild_id):
-        return "Unauthorized", 403
-
-    user = await discord_auth.fetch_user()
+    if not await check_guild_auth(guild_id): return "Unauthorized", 403
+    user = session["user"]
     guild = app.bot.get_guild(int(guild_id)) if hasattr(app, "bot") else None
     guild_name = guild.name if guild else "Unknown Server"
 
     conn = get_db()
     cursor = conn.cursor()
-
     cursor.execute("SELECT role_id FROM dashboard_permissions WHERE guild_id = ?", (guild_id,))
     perm_roles = cursor.fetchall()
 
@@ -326,140 +260,149 @@ async def dashboard_management(guild_id):
     if guild:
         roles = [{"id": str(r.id), "name": r.name, "color": str(r.color)} for r in guild.roles if not r.is_default()]
 
-    return await render_template('dashboard_layout.html',
-                                 user=user,
-                                 guild_id=guild_id,
-                                 guild_name=guild_name,
-                                 tab='management',
-                                 perm_roles=perm_roles,
-                                 logs=logs,
-                                 roles=roles)
+    return await render_template('dashboard_layout.html', user=user, guild_id=guild_id, guild_name=guild_name, tab='management', perm_roles=perm_roles, logs=logs, roles=roles)
 
-# --- API ENDPOINTS FOR VANILLA JS ---
-
+# --- API ---
 @app.route("/api/dashboard/<guild_id>/save", methods=["POST"])
 @requires_authorization
 async def api_save_config(guild_id):
-    if not await check_guild_auth(guild_id):
-        return jsonify({"error": "Unauthorized"}), 403
-
-    user = await discord_auth.fetch_user()
+    if not await check_guild_auth(guild_id): return jsonify({"error": "Unauthorized"}), 403
+    user = session["user"]
     data = await request.get_json()
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
+    if not data: return jsonify({"error": "No data"}), 400
 
     conn = get_db()
     cursor = conn.cursor()
-
     changes = []
     for key, value in data.items():
         cursor.execute("INSERT OR REPLACE INTO server_config (guild_id, key, value) VALUES (?, ?, ?)", (guild_id, key, str(value)))
         changes.append(key)
 
     conn.commit()
-
-    if changes:
-        log_audit(guild_id, str(user.id), user.name, f"Updated configuration: {', '.join(changes)}")
-
+    if changes: log_audit(guild_id, str(user["id"]), user["name"], f"Updated config: {', '.join(changes)}")
     return jsonify({"success": True})
 
 @app.route("/api/dashboard/<guild_id>/permissions", methods=["POST", "DELETE"])
 @requires_authorization
 async def api_permissions(guild_id):
-    if not await check_guild_auth(guild_id):
-        return jsonify({"error": "Unauthorized"}), 403
-
-    user = await discord_auth.fetch_user()
+    if not await check_guild_auth(guild_id): return jsonify({"error": "Unauthorized"}), 403
+    user = session["user"]
     data = await request.get_json()
     role_id = data.get("role_id")
-    if not role_id:
-        return jsonify({"error": "Missing role_id"}), 400
+    if not role_id: return jsonify({"error": "Missing role_id"}), 400
 
     conn = get_db()
     cursor = conn.cursor()
-
     if request.method == "POST":
         cursor.execute("INSERT OR REPLACE INTO dashboard_permissions (guild_id, role_id) VALUES (?, ?)", (guild_id, role_id))
-        log_audit(guild_id, str(user.id), user.name, f"Granted dashboard access to Role ID: {role_id}")
+        log_audit(guild_id, str(user["id"]), user["name"], f"Granted access to Role: {role_id}")
     else:
         cursor.execute("DELETE FROM dashboard_permissions WHERE guild_id = ? AND role_id = ?", (guild_id, role_id))
-        log_audit(guild_id, str(user.id), user.name, f"Revoked dashboard access from Role ID: {role_id}")
+        log_audit(guild_id, str(user["id"]), user["name"], f"Revoked access from Role: {role_id}")
 
     conn.commit()
     return jsonify({"success": True})
 
-
-
 @app.route("/dashboard/<guild_id>/leveling_reward_add", methods=["POST"])
 @requires_authorization
 async def dashboard_leveling_reward_add(guild_id):
-    if not await check_guild_auth(guild_id):
-        return "Unauthorized", 403
-
+    if not await check_guild_auth(guild_id): return "Unauthorized", 403
     form = await request.form
-    level = form.get('level')
-    role_id = form.get('role_id')
-
+    level, role_id = form.get('level'), form.get('role_id')
     if level and role_id:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO leveling_rewards (guild_id, level, role_id) VALUES (?, ?, ?)", (guild_id, level, str(role_id)))
         conn.commit()
-
     return redirect(url_for("dashboard_modules", guild_id=guild_id))
-
 
 @app.route("/dashboard/<guild_id>/leveling_reward_delete", methods=["POST"])
 @requires_authorization
 async def dashboard_leveling_reward_delete(guild_id):
-    if not await check_guild_auth(guild_id):
-        return "Unauthorized", 403
-
+    if not await check_guild_auth(guild_id): return "Unauthorized", 403
     form = await request.form
     level = form.get('level')
-
     if level:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM leveling_rewards WHERE guild_id = ? AND level = ?", (guild_id, level))
         conn.commit()
-
     return redirect(url_for("dashboard_modules", guild_id=guild_id))
 
 @app.route("/dashboard/<guild_id>/leveling_multiplier_add", methods=["POST"])
 @requires_authorization
 async def dashboard_leveling_multiplier_add(guild_id):
-    if not await check_guild_auth(guild_id):
-        return "Unauthorized", 403
-
+    if not await check_guild_auth(guild_id): return "Unauthorized", 403
     form = await request.form
-    role_id = form.get('role_id')
-    multiplier = form.get('multiplier')
-
+    role_id, multiplier = form.get('role_id'), form.get('multiplier')
     if role_id and multiplier:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO leveling_multipliers (guild_id, role_id, multiplier) VALUES (?, ?, ?)", (guild_id, str(role_id), float(multiplier)))
         conn.commit()
-
     return redirect(url_for("dashboard_modules", guild_id=guild_id))
 
 @app.route("/dashboard/<guild_id>/leveling_multiplier_delete", methods=["POST"])
 @requires_authorization
 async def dashboard_leveling_multiplier_delete(guild_id):
-    if not await check_guild_auth(guild_id):
-        return "Unauthorized", 403
-
+    if not await check_guild_auth(guild_id): return "Unauthorized", 403
     form = await request.form
     role_id = form.get('role_id')
-
     if role_id:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM leveling_multipliers WHERE guild_id = ? AND role_id = ?", (guild_id, str(role_id)))
         conn.commit()
-
     return redirect(url_for("dashboard_modules", guild_id=guild_id))
+
+# --- WEBHOOK ---
+@app.route("/github-webhook", methods=["POST"])
+async def github_webhook():
+    event = request.headers.get("X-GitHub-Event")
+    if event != "push": return "Ignored", 200
+
+    payload = await request.get_json()
+    if not payload: return "Invalid payload", 400
+
+    commits = payload.get("commits", [])
+    if not commits: return "No commits", 200
+
+    branch = payload.get("ref", "").split("/")[-1]
+    repo_name = payload.get("repository", {}).get("full_name", "Unknown Repo")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT channel_id FROM changelog_config WHERE id = 1")
+    row = cursor.fetchone()
+
+    if not row or not hasattr(app, "bot") or not app.bot.is_ready(): return "Bot not ready or channel not configured", 200
+
+    channel_id = row[0]
+    channel = app.bot.get_channel(channel_id)
+    if not channel: return "Channel not found", 200
+
+    for commit in commits:
+        author_name = commit.get("author", {}).get("name", "Unknown")
+        message = commit.get("message", "No commit message")
+        commit_url = commit.get("url", "")
+        commit_id = commit.get("id", "Unknown")[:7]
+
+        content = f"**Branch:** `{branch}`\n**Author:** `{author_name}`\n**Commit:** [`{commit_id}`]({commit_url})\n\n```\n{message}\n```"
+        from cogs import embed_factory
+        embed = embed_factory.create_clean_embed(f"🛠️ New Commit to {repo_name}", content)
+        app.bot.loop.create_task(channel.send(embed=embed))
+
+    return "OK", 200
+
+
+@app.route('/api/preview_url', methods=['GET'])
+async def preview_url():
+    url = request.args.get('url')
+    if not url: return jsonify({"error": "No url"}), 400
+
+    # In a real app we'd fetch OpenGraph meta tags, but here we can just do a very basic validation/return
+    # This is a stub to make the JS embed work nicely if requested
+    return jsonify({"url": url})
 
 @app.route('/assets/<path:filename>')
 async def custom_static(filename):

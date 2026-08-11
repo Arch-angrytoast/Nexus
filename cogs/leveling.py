@@ -50,46 +50,51 @@ class Leveling(commands.Cog):
     def get_xp_config(self, guild_id=None):
         cursor = self.bot.db_conn.cursor()
         keys = [
-            'xp_min', 'xp_max', 'xp_cooldown', 'leveling_whitelist', 'leveling_blacklist',
-            'leveling_role_blacklist', 'leveling_min_length', 'leveling_announcement_channel',
-            'leveling_custom_message', 'leveling_role_stacking'
+            "xp_min", "xp_max", "xp_cooldown", "leveling_whitelist", "leveling_blacklist",
+            "leveling_role_blacklist", "leveling_min_length", "leveling_announcement_channel",
+            "leveling_custom_message", "leveling_role_stacking", "module_leveling"
         ]
+
         if guild_id:
-            query = f"SELECT key, value FROM server_config WHERE key IN ({','.join(['?']*len(keys))}) AND guild_id = ?"
-            cursor.execute(query, keys + [str(guild_id)])
+            keys_placeholders = ",".join(["?"]*len(keys))
+            query = f"SELECT key, value FROM server_config WHERE key IN ({keys_placeholders}) AND guild_id = ?"
+            query_params = keys + [str(guild_id)]
+            cursor.execute(query, query_params)
         else:
-            query = f"SELECT key, value FROM server_config WHERE key IN ({','.join(['?']*len(keys))})"
+            # Fallback for old single server setups
+            keys_placeholders = ",".join(["?"]*len(keys))
+            query = f"SELECT key, value FROM server_config WHERE key IN ({keys_placeholders})"
             cursor.execute(query, keys)
+
         rows = cursor.fetchall()
 
         config = {
             "xp_min": 15, "xp_max": 25, "xp_cooldown": 60, "leveling_whitelist": "", "leveling_blacklist": "",
             "leveling_role_blacklist": "", "leveling_min_length": 5, "leveling_announcement_channel": "current",
-            "leveling_custom_message": "🎉 **{user}** just leveled up to **Level {level}**!", "leveling_role_stacking": "stack"
+            "leveling_custom_message": "🎉 **{user}** just leveled up to **Level {level}**!",
+            "leveling_role_stacking": "stack",
+            "module_leveling": "1"
         }
+
         for r in rows:
             if r[0] in ['xp_min', 'xp_max', 'xp_cooldown', 'leveling_min_length']:
                 config[r[0]] = int(r[1])
             else:
                 config[r[0]] = str(r[1])
+
         return config
 
-    def get_rewards(self, guild_id):
-        cursor = self.bot.db_conn.cursor()
-        cursor.execute("SELECT level, role_id FROM leveling_rewards WHERE guild_id = ? ORDER BY level ASC", (str(guild_id),))
-        return cursor.fetchall()
+    async def check_permissions_and_cooldown(self, member, channel_id, config, message_length=None):
+        # 1. Check Master Toggle
+        if config.get("module_leveling", "1") == "0":
+            return False
 
-    def get_multipliers(self, guild_id):
-        cursor = self.bot.db_conn.cursor()
-        cursor.execute("SELECT role_id, multiplier FROM leveling_multipliers WHERE guild_id = ?", (str(guild_id),))
-        return {r[0]: r[1] for r in cursor.fetchall()}
+        # 2. Check Min Length
+        if message_length is not None and message_length < config.get("leveling_min_length", 5):
+            return False
 
-    def calc_xp_for_level(self, level):
-        return 5 * (level ** 2) + (50 * level) + 100
-
-    async def check_permissions_and_cooldown(self, member, channel_id, config):
-        # Check Role Blacklist
-        if config['leveling_role_blacklist']:
+        # Check role blacklist
+        if config.get('leveling_role_blacklist'):
             role_blacklist = [x.strip() for x in config['leveling_role_blacklist'].split(',')]
             for role in member.roles:
                 if str(role.id) in role_blacklist:
@@ -97,20 +102,21 @@ class Leveling(commands.Cog):
 
         # Check whitelist/blacklist
         channel_id = str(channel_id)
-        if config['leveling_whitelist']:
+        if config.get('leveling_whitelist'):
             whitelisted = [x.strip() for x in config['leveling_whitelist'].split(',')]
             if channel_id not in whitelisted:
                 return False
 
-        if config['leveling_blacklist']:
+        if config.get('leveling_blacklist'):
             blacklisted = [x.strip() for x in config['leveling_blacklist'].split(',')]
             if channel_id in blacklisted:
                 return False
 
         # Check cooldown
+        import time
         current_time = time.time()
         if member.id in self.cooldowns:
-            if current_time - self.cooldowns[member.id] < config['xp_cooldown']:
+            if current_time - self.cooldowns[member.id] < config.get('xp_cooldown', 60):
                 return False
 
         self.cooldowns[member.id] = current_time
@@ -180,7 +186,7 @@ class Leveling(commands.Cog):
         if message.author.bot or not message.guild:
             return
 
-        config = self.get_xp_config(str(guild.id))
+        config = self.get_xp_config(str(message.guild.id) if message and getattr(message, "guild", None) else None)
 
         if len(message.content) < config['leveling_min_length']:
             return
@@ -193,8 +199,8 @@ class Leveling(commands.Cog):
 
     @tasks.loop(minutes=5.0)
     async def voice_xp_loop(self):
-        # Fetch config inside the loop per guild
         for guild in self.bot.guilds:
+            config = self.get_xp_config(str(guild.id))
             for vc in guild.voice_channels:
                 # Need at least 2 people in VC to gain XP
                 valid_members = [m for m in vc.members if not m.bot and not m.voice.self_deaf and not m.voice.deaf]
@@ -365,7 +371,7 @@ class Leveling(commands.Cog):
     async def xp_add(self, ctx, member: discord.Member, amount: int):
         if amount <= 0: return await ctx.send("Amount must be positive.", ephemeral=True)
         await self.sync_cache_to_db()
-        config = self.get_xp_config(str(ctx.guild.id))
+        config = self.get_xp_config(str(ctx.guild.id) if ctx.guild else None)
         cursor = self.bot.db_conn.cursor()
 
         cursor.execute("SELECT xp FROM leveling_users WHERE user_id = ?", (member.id,))
@@ -426,7 +432,7 @@ class Leveling(commands.Cog):
     async def xp_set(self, ctx, member: discord.Member, amount: int):
         if amount < 0: return await ctx.send("Amount must be 0 or positive.", ephemeral=True)
         await self.sync_cache_to_db()
-        config = self.get_xp_config(str(ctx.guild.id))
+        config = self.get_xp_config(str(ctx.guild.id) if ctx.guild else None)
         cursor = self.bot.db_conn.cursor()
 
         expected_level = 0
@@ -451,7 +457,7 @@ class Leveling(commands.Cog):
     async def level_set(self, ctx, member: discord.Member, level: int):
         if level < 0: return await ctx.send("Level must be 0 or positive.", ephemeral=True)
         await self.sync_cache_to_db()
-        config = self.get_xp_config(str(ctx.guild.id))
+        config = self.get_xp_config(str(ctx.guild.id) if ctx.guild else None)
         cursor = self.bot.db_conn.cursor()
 
         # Give them the minimum XP for that level
@@ -481,6 +487,20 @@ class Leveling(commands.Cog):
             await ctx.send(f"{member.mention}'s XP and Level have been completely reset to 0.")
         else:
             await ctx.send("You must specify a member to reset, or set `server_wide` to True.", ephemeral=True)
+
+
+    def get_rewards(self, guild_id):
+        cursor = self.bot.db_conn.cursor()
+        cursor.execute("SELECT level, role_id FROM leveling_rewards WHERE guild_id = ? ORDER BY level ASC", (str(guild_id),))
+        return [{"level": row[0], "role_id": row[1]} for row in cursor.fetchall()]
+
+    def get_multipliers(self, guild_id):
+        cursor = self.bot.db_conn.cursor()
+        cursor.execute("SELECT role_id, multiplier FROM leveling_multipliers WHERE guild_id = ?", (str(guild_id),))
+        return {row[0]: float(row[1]) for row in cursor.fetchall()}
+
+    def calc_xp_for_level(self, level: int) -> int:
+        return 100 * (level ** 2)
 
 async def setup(bot):
     await bot.add_cog(Leveling(bot))
