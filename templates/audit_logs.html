@@ -1,0 +1,130 @@
+{% extends "dashboard_layout.html" %}
+
+{% block title %}Audit Logs - Nexus Dashboard{% endblock %}
+
+{% block dashboard_content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-100">Audit Logs</h1>
+    <p class="text-gray-400 mt-2">Configure channels to log specific events in your server.</p>
+</div>
+
+<form method="POST" action="/dashboard/{{ guild.id }}/audit-logs">
+    <div class="bg-[#1E1F22] rounded-xl border border-[#313338] shadow-lg p-6 mb-6">
+        <h2 class="text-xl font-semibold text-gray-200 mb-4 flex items-center">
+            <i class="fa-solid fa-file-lines mr-2"></i> Event Channels
+        </h2>
+
+        <div class="space-y-6">
+            <!-- Message Logs -->
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">💬 Message Logs (Deletes, Edits)</label>
+                <select name="message_channel" class="choices-select w-full bg-[#2B2D31] text-gray-200 rounded p-2 focus:ring focus:ring-blue-500" data-search="true">
+                    <option value="">None</option>
+                    {% for cat_name, channels in text_channels.items() %}
+                        <optgroup label="{{ cat_name }}">
+                            {% for ch in channels %}
+                                <option value="{{ ch.id }}" {% if audit_config.message_channel == ch.id|string %}selected{% endif %}># {{ ch.name }}</option>
+                            {% endfor %}
+                        </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Member Logs -->
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">👥 Member Logs (Joins, Leaves, Bans, Updates)</label>
+                <select name="member_channel" class="choices-select w-full bg-[#2B2D31] text-gray-200 rounded p-2 focus:ring focus:ring-blue-500" data-search="true">
+                    <option value="">None</option>
+                    {% for cat_name, channels in text_channels.items() %}
+                        <optgroup label="{{ cat_name }}">
+                            {% for ch in channels %}
+                                <option value="{{ ch.id }}" {% if audit_config.member_channel == ch.id|string %}selected{% endif %}># {{ ch.name }}</option>
+                            {% endfor %}
+                        </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Server Logs -->
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">🏢 Server Logs (Channels, Roles, Server settings)</label>
+                <select name="server_channel" class="choices-select w-full bg-[#2B2D31] text-gray-200 rounded p-2 focus:ring focus:ring-blue-500" data-search="true">
+                    <option value="">None</option>
+                    {% for cat_name, channels in text_channels.items() %}
+                        <optgroup label="{{ cat_name }}">
+                            {% for ch in channels %}
+                                <option value="{{ ch.id }}" {% if audit_config.server_channel == ch.id|string %}selected{% endif %}># {{ ch.name }}</option>
+                            {% endfor %}
+                        </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Voice Logs -->
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">🎙️ Voice Logs (Joins, Leaves, Moves)</label>
+                <select name="voice_channel" class="choices-select w-full bg-[#2B2D31] text-gray-200 rounded p-2 focus:ring focus:ring-blue-500" data-search="true">
+                    <option value="">None</option>
+                    {% for cat_name, channels in text_channels.items() %}
+                        <optgroup label="{{ cat_name }}">
+                            {% for ch in channels %}
+                                <option value="{{ ch.id }}" {% if audit_config.voice_channel == ch.id|string %}selected{% endif %}># {{ ch.name }}</option>
+                            {% endfor %}
+                        </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Banner (hidden by default, managed by JS) -->
+    <div id="saveBanner" class="fixed bottom-0 left-0 right-0 bg-[#232428] border-t border-[#1E1F22] p-4 shadow-2xl flex justify-between items-center transition-transform duration-300 transform translate-y-full z-50">
+        <span class="text-gray-200 font-medium">Careful - you have unsaved changes!</span>
+        <div class="space-x-3">
+            <button type="button" onclick="window.location.reload()" class="px-4 py-2 bg-transparent text-gray-300 hover:underline">Reset</button>
+            <button type="submit" class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors font-medium">Save Changes</button>
+        </div>
+    </div>
+</form>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const selects = document.querySelectorAll('.choices-select');
+        const banner = document.getElementById('saveBanner');
+        let initialValues = {};
+
+        selects.forEach(select => {
+            new Choices(select, {
+                searchEnabled: true,
+                itemSelectText: '',
+                shouldSort: false,
+                classNames: {
+                    containerOuter: 'choices bg-[#2B2D31] text-white border-0 rounded',
+                    containerInner: 'bg-[#2B2D31] border-0 rounded',
+                    input: 'bg-[#1E1F22] text-white',
+                    inputCloned: 'bg-[#1E1F22] text-white',
+                    list: 'bg-[#2B2D31]',
+                    listDropdown: 'bg-[#2B2D31] border border-[#1E1F22]',
+                    itemChoice: 'text-gray-200 hover:bg-[#313338]',
+                    itemSelectable: 'text-gray-200',
+                }
+            });
+            initialValues[select.name] = select.value;
+            select.addEventListener('change', checkChanges);
+        });
+
+        function checkChanges() {
+            let changed = false;
+            selects.forEach(select => {
+                if (select.value !== initialValues[select.name]) changed = true;
+            });
+
+            if (changed) {
+                banner.classList.remove('translate-y-full');
+            } else {
+                banner.classList.add('translate-y-full');
+            }
+        }
+    });
+</script>
+{% endblock %}
