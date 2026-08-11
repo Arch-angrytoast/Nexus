@@ -125,7 +125,7 @@ class Leveling(commands.Cog):
     def calculate_xp_gain(self, member, config):
         import random
         base_xp = random.randint(config['xp_min'], config['xp_max'])
-        multipliers = self.get_multipliers()
+        multipliers = self.get_multipliers(str(member.guild.id))
         highest_multiplier = 1.0
         for role in member.roles:
             if str(role.id) in multipliers:
@@ -207,6 +207,7 @@ class Leveling(commands.Cog):
                 if len(valid_members) < 2:
                     continue
 
+                config = self.get_xp_config(str(guild.id))
                 for member in valid_members:
                     if not await self.check_permissions_and_cooldown(member, vc.id, config):
                         continue
@@ -230,7 +231,7 @@ class Leveling(commands.Cog):
 
     async def process_level_up(self, member, new_level, config, fallback_channel=None):
         # Apply Role Rewards
-        rewards = self.get_rewards()
+        rewards = self.get_rewards(str(member.guild.id))
         roles_to_add = []
         roles_to_remove = []
 
@@ -340,7 +341,7 @@ class Leveling(commands.Cog):
 
     @commands.hybrid_command(name="rewards", description="View all unlockable role rewards.")
     async def rewards_list(self, ctx):
-        rewards = self.get_rewards()
+        rewards = self.get_rewards(str(member.guild.id))
         if not rewards:
             return await ctx.send("There are no role rewards configured for this server yet.", ephemeral=True)
 

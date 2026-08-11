@@ -7,6 +7,7 @@ from functools import wraps
 import urllib.parse
 
 app = Quart(__name__)
+
 app.secret_key = os.getenv("QUART_SECRET_KEY", os.urandom(32))
 
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
