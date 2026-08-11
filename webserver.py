@@ -408,6 +408,60 @@ async def preview_url():
 async def custom_static(filename):
     return await send_from_directory('assets', filename)
 
+@app.route("/dashboard/<guild_id>/audit-logs", methods=["GET", "POST"], strict_slashes=False)
+async def dashboard_audit_logs_config(guild_id):
+    if not await check_guild_auth(guild_id): return "Unauthorized", 403
+    guild = bot.get_guild(int(guild_id))
+    if not guild: return "Guild not found", 404
+    user = await get_current_user()
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == "POST":
+        form = await request.form
+        msg_ch = form.get("message_channel") or None
+        mem_ch = form.get("member_channel") or None
+        srv_ch = form.get("server_channel") or None
+        voc_ch = form.get("voice_channel") or None
+
+        # Ensure config exists
+        cursor.execute("SELECT 1 FROM audit_log_config WHERE guild_id = ?", (str(guild_id),))
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO audit_log_config (guild_id) VALUES (?)", (str(guild_id),))
+
+        cursor.execute('''
+            UPDATE audit_log_config
+            SET message_channel = ?, member_channel = ?, server_channel = ?, voice_channel = ?
+            WHERE guild_id = ?
+        ''', (msg_ch, mem_ch, srv_ch, voc_ch, str(guild_id)))
+        conn.commit()
+        return redirect(url_for("dashboard_audit_logs_config", guild_id=guild_id))
+
+    cursor.execute("SELECT message_channel, member_channel, server_channel, voice_channel FROM audit_log_config WHERE guild_id = ?", (str(guild_id),))
+    row = cursor.fetchone()
+
+    # Dictionary of channels grouped by category for the dropdowns
+    text_channels = {}
+    for ch in guild.text_channels:
+        cat_name = ch.category.name if ch.category else "Uncategorized"
+        if cat_name not in text_channels: text_channels[cat_name] = []
+        text_channels[cat_name].append(ch)
+
+    config = {
+        "message_channel": row[0] if row else None,
+        "member_channel": row[1] if row else None,
+        "server_channel": row[2] if row else None,
+        "voice_channel": row[3] if row else None
+    }
+
+    return await render_template(
+        "audit_logs.html",
+        guild=guild,
+        user=user,
+        text_channels=text_channels,
+        audit_config=config
+    )
+
 async def run_server(bot):
     app.bot = bot
     from hypercorn.asyncio import serve

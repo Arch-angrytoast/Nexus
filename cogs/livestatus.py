@@ -73,7 +73,7 @@ class LiveStatus(commands.Cog):
         content += f"**Ping:** `{ws_latency}ms`\n\n"
 
         content += f"**🤖 Bot Identity & Resources**\n"
-        content += f"**Version:** `v2.1.0`\n"
+        content += f"**Version:** `v0.7.0`\n"
         content += f"**Library:** `Powered by discord.py`\n"
         content += f"**Creator:** `Created by @Angrytoast`\n"
 

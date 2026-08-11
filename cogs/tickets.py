@@ -88,6 +88,7 @@ class Tickets(commands.Cog):
 
         embed = embed_factory.create_clean_embed(f"⚙️ Panel Config: {panel_id}", content)
         view = ui_tickets.PanelConfigView(self.db_conn, panel_id)
+        # We don't add the dropdown here anymore, the view does it internally.
         await ctx.send(embed=embed, view=view, ephemeral=True)
 
 async def setup(bot):

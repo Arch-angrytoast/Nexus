@@ -253,8 +253,6 @@ class PublishedPanelView(discord.ui.View):
 class AddButtonModal(discord.ui.Modal, title="Add Ticket Type"):
     btn_label = discord.ui.TextInput(label="Button Label (e.g. Support)", max_length=30)
     btn_emoji = discord.ui.TextInput(label="Emoji (Optional)", required=False, max_length=10)
-    btn_role = discord.ui.TextInput(label="Specific Ping Role ID (Optional)", required=False)
-    btn_cat = discord.ui.TextInput(label="Specific Category ID (Optional)", required=False)
 
     def __init__(self, parent_view):
         super().__init__()
@@ -263,17 +261,21 @@ class AddButtonModal(discord.ui.Modal, title="Add Ticket Type"):
     async def on_submit(self, interaction: discord.Interaction):
         cursor = self.parent_view.db_conn.cursor()
         cursor.execute(
-            "INSERT INTO ticket_buttons (panel_id, label, emoji, ping_role_id, category_id) VALUES (?, ?, ?, ?, ?)",
-            (self.parent_view.panel_id, self.btn_label.value, self.btn_emoji.value or None, self.btn_role.value or None, self.btn_cat.value or None)
+            "INSERT INTO ticket_buttons (panel_id, label, emoji) VALUES (?, ?, ?)",
+            (self.parent_view.panel_id, self.btn_label.value, self.btn_emoji.value or None)
         )
         self.parent_view.db_conn.commit()
-        await self.parent_view.refresh(interaction)
+
+        # Get the inserted button ID to configure role/category
+        cursor.execute("SELECT last_insert_rowid()")
+        btn_id = cursor.fetchone()[0]
+
+        await interaction.response.edit_message(embed=embed_factory.create_clean_embed("Configure Additional Settings", "Select specific role or category if needed."), view=ButtonConfigView(self.parent_view, btn_id))
+
 
 class EditButtonModal(discord.ui.Modal, title="Edit Ticket Type"):
     btn_label = discord.ui.TextInput(label="Button Label (e.g. Support)", max_length=30)
     btn_emoji = discord.ui.TextInput(label="Emoji (Optional)", required=False, max_length=10)
-    btn_role = discord.ui.TextInput(label="Specific Ping Role ID (Optional)", required=False)
-    btn_cat = discord.ui.TextInput(label="Specific Category ID (Optional)", required=False)
 
     def __init__(self, parent_view, button_id, current_data):
         super().__init__()
@@ -282,17 +284,57 @@ class EditButtonModal(discord.ui.Modal, title="Edit Ticket Type"):
 
         self.btn_label.default = current_data[0]
         self.btn_emoji.default = current_data[1] or ""
-        self.btn_role.default = current_data[2] or ""
-        self.btn_cat.default = current_data[3] or ""
 
     async def on_submit(self, interaction: discord.Interaction):
         cursor = self.parent_view.db_conn.cursor()
         cursor.execute(
-            "UPDATE ticket_buttons SET label=?, emoji=?, ping_role_id=?, category_id=? WHERE button_id=?",
-            (self.btn_label.value, self.btn_emoji.value or None, self.btn_role.value or None, self.btn_cat.value or None, self.button_id)
+            "UPDATE ticket_buttons SET label=?, emoji=? WHERE button_id=?",
+            (self.btn_label.value, self.btn_emoji.value or None, self.button_id)
         )
         self.parent_view.db_conn.commit()
-        await self.parent_view.refresh(interaction)
+        await interaction.response.edit_message(embed=embed_factory.create_clean_embed("Configure Additional Settings", "Select specific role or category if needed."), view=ButtonConfigView(self.parent_view, self.button_id))
+
+class ButtonRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, parent_view, button_id):
+        self.parent_view = parent_view
+        self.button_id = button_id
+        super().__init__(placeholder="Select specific ping role (Optional)")
+
+    async def callback(self, interaction: discord.Interaction):
+        role = self.values[0]
+        cursor = self.parent_view.db_conn.cursor()
+        cursor.execute("UPDATE ticket_buttons SET ping_role_id = ? WHERE button_id = ?", (str(role.id), self.button_id))
+        self.parent_view.db_conn.commit()
+        await interaction.response.send_message(f"Saved role {role.mention} for this button.", ephemeral=True)
+
+class ButtonCategorySelect(discord.ui.ChannelSelect):
+    def __init__(self, parent_view, button_id):
+        self.parent_view = parent_view
+        self.button_id = button_id
+        super().__init__(placeholder="Select specific category (Optional)", channel_types=[discord.ChannelType.category])
+
+    async def callback(self, interaction: discord.Interaction):
+        cat = self.values[0]
+        cursor = self.parent_view.db_conn.cursor()
+        cursor.execute("UPDATE ticket_buttons SET category_id = ? WHERE button_id = ?", (str(cat.id), self.button_id))
+        self.parent_view.db_conn.commit()
+        await interaction.response.send_message(f"Saved category {cat.mention} for this button.", ephemeral=True)
+
+class ButtonConfigView(discord.ui.View):
+    def __init__(self, builder_view, button_id):
+        super().__init__(timeout=600)
+        self.db_conn = builder_view.db_conn
+        self.builder_view = builder_view
+        self.button_id = button_id
+
+        self.add_item(ButtonRoleSelect(builder_view, button_id))
+        self.add_item(ButtonCategorySelect(builder_view, button_id))
+
+        back_btn = discord.ui.Button(label="Done / Back to Builder", style=discord.ButtonStyle.secondary)
+        async def back_callback(interaction: discord.Interaction):
+            await self.builder_view.refresh(interaction)
+        back_btn.callback = back_callback
+        self.add_item(back_btn)
 
 class BuilderButtonActionSelect(discord.ui.Select):
     def __init__(self, parent_view, options, action_type):
@@ -411,25 +453,48 @@ class TicketBuilderView(discord.ui.View):
 
 # --- PANEL CONFIG (/ticket-config) ---
 
-class PanelConfigModal(discord.ui.Modal, title="Edit Panel Config"):
-    def __init__(self, db_conn, panel_id, key, current_val):
+class PanelConfigMessageModal(discord.ui.Modal, title="Edit Panel Message"):
+    def __init__(self, parent_view, key, current_val):
         super().__init__()
-        self.db_conn = db_conn
-        self.panel_id = panel_id
+        self.parent_view = parent_view
         self.key = key
-        self.val_input = discord.ui.TextInput(label="New Value (ID or Text)", default=current_val, style=discord.TextStyle.long if "message" in key else discord.TextStyle.short)
+        self.val_input = discord.ui.TextInput(label="New Value", default=current_val, style=discord.TextStyle.long)
         self.add_item(self.val_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        cursor = self.db_conn.cursor()
-        cursor.execute(f"UPDATE ticket_panels SET {self.key} = ? WHERE panel_id = ?", (self.val_input.value, self.panel_id))
-        self.db_conn.commit()
-        await interaction.response.send_message(f"Saved! Run `/ticket-config {self.panel_id}` again to see changes.", ephemeral=True)
+        cursor = self.parent_view.db_conn.cursor()
+        cursor.execute(f"UPDATE ticket_panels SET {self.key} = ? WHERE panel_id = ?", (self.val_input.value, self.parent_view.panel_id))
+        self.parent_view.db_conn.commit()
+        await self.parent_view.refresh(interaction)
+
+class PanelConfigRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, parent_view):
+        self.parent_view = parent_view
+        super().__init__(placeholder="Select Ping Role")
+
+    async def callback(self, interaction: discord.Interaction):
+        role = self.values[0]
+        cursor = self.parent_view.db_conn.cursor()
+        cursor.execute("UPDATE ticket_panels SET ping_role_id = ? WHERE panel_id = ?", (str(role.id), self.parent_view.panel_id))
+        self.parent_view.db_conn.commit()
+        await self.parent_view.refresh(interaction)
+
+class PanelConfigCategorySelect(discord.ui.ChannelSelect):
+    def __init__(self, parent_view, key):
+        self.parent_view = parent_view
+        self.key = key
+        super().__init__(placeholder="Select Category", channel_types=[discord.ChannelType.category])
+
+    async def callback(self, interaction: discord.Interaction):
+        cat = self.values[0]
+        cursor = self.parent_view.db_conn.cursor()
+        cursor.execute(f"UPDATE ticket_panels SET {self.key} = ? WHERE panel_id = ?", (str(cat.id), self.parent_view.panel_id))
+        self.parent_view.db_conn.commit()
+        await self.parent_view.refresh(interaction)
 
 class PanelConfigDropdown(discord.ui.Select):
-    def __init__(self, db_conn, panel_id):
-        self.db_conn = db_conn
-        self.panel_id = panel_id
+    def __init__(self, parent_view):
+        self.parent_view = parent_view
         opts = [
             discord.SelectOption(label="Initial Message", value="initial_message", description="Message sent when ticket opens"),
             discord.SelectOption(label="Claimed Message", value="claimed_message", description="Message appended when claimed"),
@@ -441,19 +506,68 @@ class PanelConfigDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         key = self.values[0]
-        cursor = self.db_conn.cursor()
-        cursor.execute(f"SELECT {key} FROM ticket_panels WHERE panel_id = ?", (self.panel_id,))
+        cursor = self.parent_view.db_conn.cursor()
+        cursor.execute(f"SELECT {key} FROM ticket_panels WHERE panel_id = ?", (self.parent_view.panel_id,))
         row = cursor.fetchone()
         current_val = row[0] if row and row[0] else ""
-        await interaction.response.send_modal(PanelConfigModal(self.db_conn, self.panel_id, key, current_val))
+
+        if "message" in key:
+            await interaction.response.send_modal(PanelConfigMessageModal(self.parent_view, key, current_val))
+        else:
+            view = discord.ui.View(timeout=600)
+            if key == "ping_role_id":
+                view.add_item(PanelConfigRoleSelect(self.parent_view))
+            else:
+                view.add_item(PanelConfigCategorySelect(self.parent_view, key))
+
+            back_btn = discord.ui.Button(label="Back", style=discord.ButtonStyle.secondary)
+            async def back_callback(interaction: discord.Interaction):
+                await self.parent_view.refresh(interaction)
+            back_btn.callback = back_callback
+            view.add_item(back_btn)
+
+            embed = embed_factory.create_clean_embed(f"Editing {key.replace('_id', '').replace('_', ' ').title()}", "Use the dropdown below to select.")
+            await interaction.response.edit_message(embed=embed, view=view)
 
 class PanelConfigView(discord.ui.View):
     def __init__(self, db_conn, panel_id):
         super().__init__(timeout=600)
         self.db_conn = db_conn
         self.panel_id = panel_id
-        self.add_item(PanelConfigDropdown(db_conn, panel_id))
+        self.add_item(PanelConfigDropdown(self))
         self.add_item(discord.ui.Button(label="Delete Entire Panel", style=discord.ButtonStyle.danger, custom_id=f"del_panel_{panel_id}"))
+
+    async def refresh(self, interaction: discord.Interaction):
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT * FROM ticket_panels WHERE panel_id = ?", (self.panel_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            self.clear_items()
+            await interaction.response.edit_message(content="Panel no longer exists.", embed=None, view=self)
+            return
+
+        p_id, title, desc, init_msg, claim_msg, role_id, create_cat, claim_cat = row
+
+        role_str = f"<@&{role_id}>" if role_id else "Not Set"
+        create_cat_str = f"<#{create_cat}>" if create_cat else "Not Set (Auto-creates root)"
+        claim_cat_str = f"<#{claim_cat}>" if claim_cat else "Not Set (Stays in current)"
+
+        content = f"Editing Configuration for **{self.panel_id}**\n\n"
+        content += f"**Initial Message:** {init_msg}\n"
+        content += f"**Claimed Message:** {claim_msg}\n"
+        content += f"**Ping Role:** {role_str}\n"
+        content += f"**Created Category:** {create_cat_str}\n"
+        content += f"**Claimed Category:** {claim_cat_str}\n\n"
+        content += "Use the dropdown below to modify these settings or delete the panel entirely."
+
+        embed = embed_factory.create_clean_embed(f"⚙️ Panel Config: {self.panel_id}", content)
+
+        self.clear_items()
+        self.add_item(PanelConfigDropdown(self))
+        self.add_item(discord.ui.Button(label="Delete Entire Panel", style=discord.ButtonStyle.danger, custom_id=f"del_panel_{self.panel_id}"))
+
+        await interaction.response.edit_message(embed=embed, view=self)
 
     async def interaction_check(self, interaction: discord.Interaction):
         custom_id = interaction.data.get("custom_id", "")

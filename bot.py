@@ -96,6 +96,17 @@ def init_db():
     conn.commit()
 
     cursor.execute('''
+        CREATE TABLE IF NOT EXISTS audit_log_config (
+            guild_id TEXT PRIMARY KEY,
+            message_channel TEXT,
+            member_channel TEXT,
+            server_channel TEXT,
+            voice_channel TEXT
+        )
+    ''')
+    conn.commit()
+
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS ticket_panels (
             panel_id TEXT PRIMARY KEY,
             title TEXT,
@@ -170,6 +181,7 @@ class NexusBot(commands.Bot):
         await self.load_extension("cogs.changelogs")
         await self.load_extension("cogs.misc")
         await self.load_extension("cogs.leveling")
+        await self.load_extension("cogs.auditlog")
 
         try:
             synced = await self.tree.sync()

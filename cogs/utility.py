@@ -82,7 +82,7 @@ class Utility(commands.Cog):
         embed.add_field(name="💻 System & Host", value=f"**OS:** {host_os}\n**CPU (Bot):** {bot_cpu}% | **(Sys):** {sys_cpu}%\n**RAM (Bot):** {bot_ram_mb:.2f} MB\n**RAM (Sys):** {used_ram_gb:.2f}GB / {total_ram_gb:.2f}GB", inline=False)
         embed.add_field(name="⏱️ Performance", value=f"**Uptime:** {uptime_str}\n**WebSocket Ping:** {ws_latency}ms\n**API Latency:** {api_latency}ms\n**Database:** {db_status}", inline=False)
         embed.add_field(name="📈 Scale & Analytics", value=f"**Servers:** {guilds}\n**Users:** {users:,}\n**Channels:** {channels:,}\n**Shards:** {shard_info}", inline=False)
-        embed.add_field(name="🛠️ Environment", value=f"**Python:** v{py_ver}\n**Library:** discord.py v{dpy_ver}", inline=False)
+        embed.add_field(name="🛠️ Environment", value=f"**Python:** v{py_ver}\n**Version:** v0.7.0\n**Library:** discord.py v{dpy_ver}", inline=False)
 
         await msg.edit(content=None, embed=embed)
 
