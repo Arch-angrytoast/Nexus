@@ -1,5 +1,4 @@
-<div align="center">
-  <img src="assets/banner.png" alt="Nexus Banner" width="100%" />
+<div align="left">
 
   <br /><br />
 
