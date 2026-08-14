@@ -160,7 +160,10 @@ class NexusBot(commands.Bot):
         intents.presences = True
         intents.auto_moderation_configuration = True
         intents.auto_moderation_execution = True
-        super().__init__(command_prefix=PREFIX, intents=intents, help_command=None)
+        from discord import app_commands
+        installs = app_commands.AppInstallationType(guild=True, user=True)
+        contexts = app_commands.AppCommandContext(guild=True, dm_channel=True, private_channel=True)
+        super().__init__(command_prefix=PREFIX, intents=intents, help_command=None, allowed_installs=installs, allowed_contexts=contexts)
         self.db_conn = init_db()
 
     async def setup_hook(self):
