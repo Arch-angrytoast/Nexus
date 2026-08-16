@@ -40,10 +40,12 @@ class Leveling(commands.Cog):
         self.bot.db_conn.commit()
         self.flush_cache.start()
         self.voice_xp_loop.start()
+        self.level_audit_loop.start()
 
     def cog_unload(self):
         self.flush_cache.cancel()
         self.voice_xp_loop.cancel()
+        self.level_audit_loop.cancel()
         # Perform one final sync on unload
         asyncio.create_task(self.sync_cache_to_db())
 
@@ -151,15 +153,51 @@ class Leveling(commands.Cog):
 
         projected_total_xp = current_db_xp + self.xp_cache[member.id]
 
-        xp_needed = self.calc_xp_for_level(current_level)
-        if projected_total_xp >= xp_needed:
-            # Level up! We must flush their specific cache immediately to update DB before processing roles.
-            new_level = current_level + 1
-            cursor.execute("INSERT OR REPLACE INTO leveling_users (user_id, xp, level) VALUES (?, ?, ?)", (member.id, projected_total_xp, new_level))
+        correct_level = self.get_level_from_xp(projected_total_xp)
+        if correct_level > current_level:
+            # Level up! They might have skipped multiple levels, so we use correct_level.
+            cursor.execute("INSERT OR REPLACE INTO leveling_users (user_id, xp, level) VALUES (?, ?, ?)", (member.id, projected_total_xp, correct_level))
             self.bot.db_conn.commit()
             self.xp_cache[member.id] = 0 # reset cache since we saved it
 
-            await self.process_level_up(member, new_level, config, fallback_channel)
+            await self.process_level_up(member, correct_level, config, fallback_channel)
+
+    @tasks.loop(minutes=3.0)
+    async def level_audit_loop(self):
+        try:
+            cursor = self.bot.db_conn.cursor()
+            cursor.execute("SELECT user_id, xp, level FROM leveling_users")
+            users = cursor.fetchall()
+
+            for user_id, xp, current_level in users:
+                correct_level = self.get_level_from_xp(xp)
+                if correct_level > current_level:
+                    # They should be a higher level than they are. Correct it.
+                    cursor.execute("UPDATE leveling_users SET level = ? WHERE user_id = ?", (correct_level, user_id))
+                    self.bot.db_conn.commit()
+
+                    # Attempt to process their level up rewards immediately
+                    user_id_int = int(user_id)
+                    member = None
+                    for guild in self.bot.guilds:
+                        member = guild.get_member(user_id_int)
+                        if member:
+                            break
+
+                    if member:
+                        config = self.get_xp_config(str(member.guild.id))
+                        await self.process_level_up(member, correct_level, config, fallback_channel=None)
+        except Exception as e:
+            print(f"Exception in level_audit_loop: {e}")
+
+    @level_audit_loop.before_loop
+    async def before_level_audit_loop(self):
+        await self.bot.wait_until_ready()
+
+    @level_audit_loop.error
+    async def level_audit_loop_error(self, error):
+        print(f"level_audit_loop crashed with error: {error}")
+        self.level_audit_loop.restart()
 
     @tasks.loop(minutes=2.0)
     async def flush_cache(self):
@@ -518,6 +556,13 @@ class Leveling(commands.Cog):
 
     def calc_xp_for_level(self, level: int) -> int:
         return 100 * (level ** 2)
+
+    def get_level_from_xp(self, xp: int) -> int:
+        level = 0
+        while xp >= self.calc_xp_for_level(level + 1):
+            level += 1
+        return level
+
 
 async def setup(bot):
     await bot.add_cog(Leveling(bot))
