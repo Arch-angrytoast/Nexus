@@ -89,32 +89,40 @@ class LiveStatus(commands.Cog):
 
     @tasks.loop(seconds=60)
     async def live_status_loop(self):
-        await self.bot.wait_until_ready()
+        try:
+            await self.bot.wait_until_ready()
 
-        cursor = self.bot.db_conn.cursor()
-        cursor.execute("SELECT channel_id, message_id FROM live_status")
-        rows = cursor.fetchall()
+            cursor = self.bot.db_conn.cursor()
+            cursor.execute("SELECT channel_id, message_id FROM live_status")
+            rows = cursor.fetchall()
 
-        if not rows:
-            return
+            if not rows:
+                return
 
-        embed, view = self.generate_live_status_content()
+            embed, view = self.generate_live_status_content()
 
-        for row in rows:
-            try:
-                channel = self.bot.get_channel(row[0])
-                if channel:
-                    msg = await channel.fetch_message(row[1])
-                    await msg.edit(embed=embed, view=view)
-                else:
-                    # Could try fetching via API if not in cache, but let's skip to avoid rate limits on dead messages
+            for row in rows:
+                try:
+                    channel = self.bot.get_channel(row[0])
+                    if channel:
+                        msg = await channel.fetch_message(row[1])
+                        await msg.edit(embed=embed, view=view)
+                    else:
+                        pass
+                except discord.NotFound:
+                    cursor.execute("DELETE FROM live_status WHERE message_id = ?", (row[1],))
+                    self.bot.db_conn.commit()
+                except discord.Forbidden:
                     pass
-            except discord.NotFound:
-                # Message was deleted, remove from DB
-                cursor.execute("DELETE FROM live_status WHERE message_id = ?", (row[1],))
-                self.bot.db_conn.commit()
-            except Exception as e:
-                print(f"Failed to update live status: {e}")
+                except Exception as e:
+                    print(f"Failed to update live status for {row}: {e}")
+        except Exception as e:
+            print(f"Exception in live_status_loop outer: {e}")
+
+    @live_status_loop.error
+    async def live_status_loop_error(self, error):
+        print(f"live_status_loop crashed with error: {error}")
+        self.live_status_loop.restart()
 
 async def setup(bot):
     await bot.add_cog(LiveStatus(bot))

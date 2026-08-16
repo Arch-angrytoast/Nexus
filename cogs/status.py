@@ -66,5 +66,10 @@ class StatusCog(commands.Cog):
     async def before_rotate(self):
         await self.bot.wait_until_ready()
 
+    @rotate_status.error
+    async def rotate_status_error(self, error):
+        print(f"rotate_status loop crashed with error: {error}")
+        self.rotate_status.restart()
+
 async def setup(bot):
     await bot.add_cog(StatusCog(bot))
