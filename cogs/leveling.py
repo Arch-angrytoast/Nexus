@@ -163,7 +163,15 @@ class Leveling(commands.Cog):
 
     @tasks.loop(minutes=2.0)
     async def flush_cache(self):
-        await self.sync_cache_to_db()
+        try:
+            await self.sync_cache_to_db()
+        except Exception as e:
+            print(f"Exception in flush_cache loop: {e}")
+
+    @flush_cache.error
+    async def flush_cache_error(self, error):
+        print(f"flush_cache loop crashed with error: {error}")
+        self.flush_cache.restart()
 
     async def sync_cache_to_db(self):
         if not self.xp_cache: return
@@ -199,24 +207,33 @@ class Leveling(commands.Cog):
 
     @tasks.loop(minutes=5.0)
     async def voice_xp_loop(self):
-        for guild in self.bot.guilds:
-            config = self.get_xp_config(str(guild.id))
-            for vc in guild.voice_channels:
-                # Need at least 2 people in VC to gain XP
-                valid_members = [m for m in vc.members if not m.bot and not m.voice.self_deaf and not m.voice.deaf]
-                if len(valid_members) < 2:
-                    continue
-
+        try:
+            for guild in self.bot.guilds:
                 config = self.get_xp_config(str(guild.id))
-                for member in valid_members:
-                    if not await self.check_permissions_and_cooldown(member, vc.id, config):
-                        continue
-                    xp_gain = self.calculate_xp_gain(member, config)
-                    await self.grant_xp(member, xp_gain, config)
+                for vc in guild.voice_channels:
+                    try:
+                        valid_members = [m for m in vc.members if not m.bot and not m.voice.self_deaf and not m.voice.deaf]
+                        if len(valid_members) < 2:
+                            continue
+
+                        for member in valid_members:
+                            if not await self.check_permissions_and_cooldown(member, vc.id, config):
+                                continue
+                            xp_gain = self.calculate_xp_gain(member, config)
+                            await self.grant_xp(member, xp_gain, config)
+                    except Exception as e:
+                        print(f"Exception in voice_xp_loop for vc {vc.id}: {e}")
+        except Exception as e:
+            print(f"Exception in voice_xp_loop outer: {e}")
 
     @voice_xp_loop.before_loop
     async def before_voice_xp_loop(self):
         await self.bot.wait_until_ready()
+
+    @voice_xp_loop.error
+    async def voice_xp_loop_error(self, error):
+        print(f"voice_xp_loop crashed with error: {error}")
+        self.voice_xp_loop.restart()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
