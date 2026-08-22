@@ -666,5 +666,12 @@ class Leveling(commands.Cog):
         return level
 
 
+    def get_level_from_xp(self, xp: int) -> int:
+        level = 0
+        while xp >= self.calc_xp_for_level(level + 1):
+            level += 1
+        return level
+
+
 async def setup(bot):
     await bot.add_cog(Leveling(bot))
