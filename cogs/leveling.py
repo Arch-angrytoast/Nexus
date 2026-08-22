@@ -12,6 +12,8 @@ class Leveling(commands.Cog):
         self.cooldowns = {}
         self.voice_sessions = {}
         self.xp_cache = {}  # In-memory cache {user_id: pending_xp}
+        self.active_drops = {} # {guild_id: {'multiplier': float, 'expires_at': float}}
+        self.xp_freezes = {} # {user_id: timestamp_expires}
 
         # Ensure schema exists
         self.bot.db_conn.execute('''
@@ -87,6 +89,13 @@ class Leveling(commands.Cog):
         return config
 
     async def check_permissions_and_cooldown(self, member, channel_id, config, message_length=None):
+        # 0. Check Toxicity Freeze
+        if member.id in self.xp_freezes:
+            if datetime.datetime.now().timestamp() < self.xp_freezes[member.id]:
+                return False
+            else:
+                del self.xp_freezes[member.id]
+
         # 1. Check Master Toggle
         if config.get("module_leveling", "1") == "0":
             return False
@@ -126,12 +135,23 @@ class Leveling(commands.Cog):
 
     def calculate_xp_gain(self, member, config):
         import random
-        base_xp = random.randint(config['xp_min'], config['xp_max'])
+        base_xp = random.randint(int(config.get('xp_min', 15)), int(config.get('xp_max', 25)))
         multipliers = self.get_multipliers(str(member.guild.id))
         highest_multiplier = 1.0
         for role in member.roles:
             if str(role.id) in multipliers:
                 highest_multiplier = max(highest_multiplier, multipliers[str(role.id)])
+
+        # Apply global active XP drop
+        guild_id_str = str(member.guild.id)
+        if guild_id_str in self.active_drops:
+            drop_data = self.active_drops[guild_id_str]
+            now = datetime.datetime.now().timestamp()
+            if now < drop_data['expires_at']:
+                highest_multiplier *= drop_data['multiplier']
+            else:
+                del self.active_drops[guild_id_str]
+
         return int(base_xp * highest_multiplier)
 
     async def grant_xp(self, member, xp_gain, config, fallback_channel=None):
@@ -171,12 +191,11 @@ class Leveling(commands.Cog):
 
             for user_id, xp, current_level in users:
                 correct_level = self.get_level_from_xp(xp)
-                if correct_level > current_level:
-                    # They should be a higher level than they are. Correct it.
+                if correct_level != current_level:
+                    # They are desynced (either too low or too high). Correct it.
                     cursor.execute("UPDATE leveling_users SET level = ? WHERE user_id = ?", (correct_level, user_id))
                     self.bot.db_conn.commit()
 
-                    # Attempt to process their level up rewards immediately
                     user_id_int = int(user_id)
                     member = None
                     for guild in self.bot.guilds:
@@ -303,9 +322,13 @@ class Leveling(commands.Cog):
                 else:
                     roles_to_remove.append(role)
 
-        if config['leveling_role_stacking'] == 'replace' and highest_earned_role:
-            roles_to_add = [highest_earned_role]
-            # Remove all other leveling roles they have
+        if config['leveling_role_stacking'] == 'replace':
+            if highest_earned_role:
+                roles_to_add = [highest_earned_role]
+            else:
+                roles_to_add = []
+
+            # Remove all other leveling roles they have (or all if they lost everything via demotion)
             for r_level, r_role_id in rewards:
                 r = member.guild.get_role(int(r_role_id))
                 if r and r != highest_earned_role and r in member.roles:
@@ -365,12 +388,75 @@ class Leveling(commands.Cog):
         cursor.execute("SELECT COUNT(*) FROM leveling_users WHERE xp > ?", (xp,))
         rank_pos = cursor.fetchone()[0] + 1
 
-        embed = discord.Embed(title=f"Rank: {member.display_name}", color=discord.Color.from_str("#2B2D31"))
-        embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(name="Rank", value=f"#{rank_pos}", inline=True)
-        embed.add_field(name="Level", value=str(level), inline=True)
-        embed.add_field(name="XP", value=f"{xp} / {next_xp}", inline=True)
-        await ctx.send(embed=embed)
+        # Generate Rank Card Image
+        try:
+            # Base Canvas
+            bg = Image.new('RGB', (800, 250), color=(43, 45, 49))
+            draw = ImageDraw.Draw(bg)
+
+            # Draw Progress Bar Background
+            bar_x = 230
+            bar_y = 170
+            bar_width = 520
+            bar_height = 30
+            draw.rounded_rectangle([bar_x, bar_y, bar_x + bar_width, bar_y + bar_height], radius=15, fill=(30, 31, 34))
+
+            # Draw Progress Bar Fill
+            prev_xp = self.calc_xp_for_level(level - 1) if level > 0 else 0
+            current_level_xp = xp - prev_xp
+            total_level_xp = next_xp - prev_xp
+
+            progress = max(0.01, min(1.0, current_level_xp / max(1, total_level_xp)))
+            fill_width = int(bar_width * progress)
+            draw.rounded_rectangle([bar_x, bar_y, bar_x + fill_width, bar_y + bar_height], radius=15, fill=(88, 101, 242))
+
+            # Fetch Avatar
+            async with aiohttp.ClientSession() as session:
+                async with session.get(member.display_avatar.with_size(128).url) as resp:
+                    avatar_data = await resp.read()
+                    avatar_img = Image.open(io.BytesIO(avatar_data)).convert("RGBA")
+                    avatar_img = avatar_img.resize((150, 150))
+
+                    # Create circular mask for avatar
+                    mask = Image.new("L", (150, 150), 0)
+                    mask_draw = ImageDraw.Draw(mask)
+                    mask_draw.ellipse((0, 0, 150, 150), fill=255)
+
+                    bg.paste(avatar_img, (40, 50), mask)
+
+            # Try to load fonts
+            try:
+                # Use default PIL font if no ttf available
+                font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
+                font_medium = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
+                font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 25)
+            except IOError:
+                font_large = ImageFont.load_default()
+                font_medium = ImageFont.load_default()
+                font_small = ImageFont.load_default()
+
+            # Draw Text
+            draw.text((230, 60), member.display_name, font=font_large, fill=(255, 255, 255))
+            draw.text((230, 110), f"Rank #{rank_pos}  |  Level {level}", font=font_medium, fill=(185, 187, 190))
+            draw.text((600, 120), f"{xp:,} / {next_xp:,} XP", font=font_small, fill=(255, 255, 255))
+
+            # Save to buffer
+            buffer = io.BytesIO()
+            bg.save(buffer, "PNG")
+            buffer.seek(0)
+            file = discord.File(buffer, filename="rank.png")
+
+            await ctx.send(file=file)
+
+        except Exception as e:
+            print(f"Failed to generate rank card: {e}")
+            # Fallback to embed
+            embed = discord.Embed(title=f"Rank: {member.display_name}", color=discord.Color.from_str("#2B2D31"))
+            embed.set_thumbnail(url=member.display_avatar.url)
+            embed.add_field(name="Rank", value=f"#{rank_pos}", inline=True)
+            embed.add_field(name="Level", value=str(level), inline=True)
+            embed.add_field(name="XP", value=f"{xp} / {next_xp}", inline=True)
+            await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="leaderboard", description="View the server's most active members.")
     async def leaderboard(self, ctx):
@@ -544,6 +630,21 @@ class Leveling(commands.Cog):
             await ctx.send("You must specify a member to reset, or set `server_wide` to True.", ephemeral=True)
 
 
+    @commands.hybrid_command(name="xpdrop", description="[ADMIN] Trigger a global XP multiplier event")
+    @commands.has_permissions(administrator=True)
+    async def xpdrop(self, ctx: commands.Context, multiplier: float, duration_hours: float):
+        if multiplier <= 1.0 or multiplier > 10.0:
+            return await ctx.send("Multiplier must be between 1.1 and 10.0", ephemeral=True)
+        if duration_hours <= 0 or duration_hours > 72:
+            return await ctx.send("Duration must be between 0.1 and 72 hours.", ephemeral=True)
+
+        expires_at = datetime.datetime.now().timestamp() + (duration_hours * 3600)
+        self.active_drops[str(ctx.guild.id)] = {'multiplier': multiplier, 'expires_at': expires_at}
+
+        embed = discord.Embed(title="🎁 GLOBAL XP DROP 🎁", description=f"An admin has activated a global **{multiplier}x XP Boost** for the entire server!", color=discord.Color.gold())
+        embed.add_field(name="Duration", value=f"Ends <t:{int(expires_at)}:R>")
+        await ctx.send(embed=embed)
+
     def get_rewards(self, guild_id):
         cursor = self.bot.db_conn.cursor()
         cursor.execute("SELECT level, role_id FROM leveling_rewards WHERE guild_id = ? ORDER BY level ASC", (str(guild_id),))
@@ -555,7 +656,15 @@ class Leveling(commands.Cog):
         return {row[0]: float(row[1]) for row in cursor.fetchall()}
 
     def calc_xp_for_level(self, level: int) -> int:
-        return 100 * (level ** 2)
+        if level <= 0: return 0
+        return 5 * (level ** 2) + 50 * level + 100
+
+    def get_level_from_xp(self, xp: int) -> int:
+        level = 0
+        while xp >= self.calc_xp_for_level(level + 1):
+            level += 1
+        return level
+
 
     def get_level_from_xp(self, xp: int) -> int:
         level = 0
