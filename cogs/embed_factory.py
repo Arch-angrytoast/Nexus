@@ -1,15 +1,12 @@
 import discord
 
 def create_clean_embed(title: str = None, description: str = None, color: discord.Color = None, author: discord.Member | discord.User = None, thumbnail_url: str = None, footer_text: str = None) -> discord.Embed:
+    """
+    Creates a standardized 'clean' embed. If no color is provided, it defaults to #2B2D31
+    which perfectly blends into Discord's dark mode background to look like a clean box.
+    """
     if color is None:
         color = discord.Color.from_str("#2B2D31")
-
-    if title and not description:
-        description = "## " + str(title)
-        title = None
-    elif title and description:
-        description = "## " + str(title) + "\n\n" + str(description)
-        title = None
 
     embed = discord.Embed(
         title=title,
@@ -31,7 +28,7 @@ def create_clean_embed(title: str = None, description: str = None, color: discor
 def create_meter_embed(author: discord.Member | discord.User, target_id: int, meter_name: str, emoji: str, score: int, progress_bar: str, snark: str) -> discord.Embed:
     embed = create_clean_embed(
         title=f"{emoji} The {meter_name.capitalize()} Meter",
-        description=f"**Target:** <@{target_id}>\n**Score:** {score}%\n\n{progress_bar}\n\n-# {snark}",
+        description=f"**Target:** <@{target_id}>\n**Score:** {score}%\n\n{progress_bar}\n\n*{snark}*"
     )
     embed.set_footer(text=f"Command: !{meter_name} • Used By: {author.display_name}")
     return embed

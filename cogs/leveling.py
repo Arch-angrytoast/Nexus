@@ -1,10 +1,13 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import time
 import math
 import asyncio
-
-from discord.ext import tasks
+import io
+import datetime
+from PIL import Image, ImageDraw, ImageFont
+import aiohttp
+from . import embed_factory
 
 class Leveling(commands.Cog):
     def __init__(self, bot):
@@ -207,7 +210,7 @@ class Leveling(commands.Cog):
                         config = self.get_xp_config(str(member.guild.id))
                         await self.process_level_up(member, correct_level, config, fallback_channel=None)
         except Exception as e:
-            print(f"Exception in level_audit_loop: {e}")
+            import traceback; traceback.print_exc()
 
     @level_audit_loop.before_loop
     async def before_level_audit_loop(self):
@@ -388,75 +391,12 @@ class Leveling(commands.Cog):
         cursor.execute("SELECT COUNT(*) FROM leveling_users WHERE xp > ?", (xp,))
         rank_pos = cursor.fetchone()[0] + 1
 
-        # Generate Rank Card Image
-        try:
-            # Base Canvas
-            bg = Image.new('RGB', (800, 250), color=(43, 45, 49))
-            draw = ImageDraw.Draw(bg)
-
-            # Draw Progress Bar Background
-            bar_x = 230
-            bar_y = 170
-            bar_width = 520
-            bar_height = 30
-            draw.rounded_rectangle([bar_x, bar_y, bar_x + bar_width, bar_y + bar_height], radius=15, fill=(30, 31, 34))
-
-            # Draw Progress Bar Fill
-            prev_xp = self.calc_xp_for_level(level - 1) if level > 0 else 0
-            current_level_xp = xp - prev_xp
-            total_level_xp = next_xp - prev_xp
-
-            progress = max(0.01, min(1.0, current_level_xp / max(1, total_level_xp)))
-            fill_width = int(bar_width * progress)
-            draw.rounded_rectangle([bar_x, bar_y, bar_x + fill_width, bar_y + bar_height], radius=15, fill=(88, 101, 242))
-
-            # Fetch Avatar
-            async with aiohttp.ClientSession() as session:
-                async with session.get(member.display_avatar.with_size(128).url) as resp:
-                    avatar_data = await resp.read()
-                    avatar_img = Image.open(io.BytesIO(avatar_data)).convert("RGBA")
-                    avatar_img = avatar_img.resize((150, 150))
-
-                    # Create circular mask for avatar
-                    mask = Image.new("L", (150, 150), 0)
-                    mask_draw = ImageDraw.Draw(mask)
-                    mask_draw.ellipse((0, 0, 150, 150), fill=255)
-
-                    bg.paste(avatar_img, (40, 50), mask)
-
-            # Try to load fonts
-            try:
-                # Use default PIL font if no ttf available
-                font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
-                font_medium = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
-                font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 25)
-            except IOError:
-                font_large = ImageFont.load_default()
-                font_medium = ImageFont.load_default()
-                font_small = ImageFont.load_default()
-
-            # Draw Text
-            draw.text((230, 60), member.display_name, font=font_large, fill=(255, 255, 255))
-            draw.text((230, 110), f"Rank #{rank_pos}  |  Level {level}", font=font_medium, fill=(185, 187, 190))
-            draw.text((600, 120), f"{xp:,} / {next_xp:,} XP", font=font_small, fill=(255, 255, 255))
-
-            # Save to buffer
-            buffer = io.BytesIO()
-            bg.save(buffer, "PNG")
-            buffer.seek(0)
-            file = discord.File(buffer, filename="rank.png")
-
-            await ctx.send(file=file)
-
-        except Exception as e:
-            print(f"Failed to generate rank card: {e}")
-            # Fallback to embed
-            embed = discord.Embed(title=f"Rank: {member.display_name}", color=discord.Color.from_str("#2B2D31"))
-            embed.set_thumbnail(url=member.display_avatar.url)
-            embed.add_field(name="Rank", value=f"#{rank_pos}", inline=True)
-            embed.add_field(name="Level", value=str(level), inline=True)
-            embed.add_field(name="XP", value=f"{xp} / {next_xp}", inline=True)
-            await ctx.send(embed=embed)
+        embed = discord.Embed(title=f"Rank: {member.display_name}", color=discord.Color.from_str("#2B2D31"))
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.add_field(name="Rank", value=f"#{rank_pos}", inline=True)
+        embed.add_field(name="Level", value=str(level), inline=True)
+        embed.add_field(name="XP", value=f"{xp} / {next_xp}", inline=True)
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="leaderboard", description="View the server's most active members.")
     async def leaderboard(self, ctx):
