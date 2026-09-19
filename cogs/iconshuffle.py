@@ -10,6 +10,9 @@ from . import embed_factory
 class DelaySelect(discord.ui.Select):
     def __init__(self):
         options = [
+            discord.SelectOption(label="5 Minutes", value="300"),
+            discord.SelectOption(label="10 Minutes", value="600"),
+            discord.SelectOption(label="15 Minutes", value="900"),
             discord.SelectOption(label="30 Minutes", value="1800"),
             discord.SelectOption(label="1 Hour", value="3600"),
             discord.SelectOption(label="2 Hours", value="7200"),
