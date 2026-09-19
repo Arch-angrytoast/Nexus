@@ -143,6 +143,32 @@ class Utility(commands.Cog):
         embed = embed_factory.create_clean_embed("🔧 System Diagnostics", content)
         await ctx.send(embed=embed, ephemeral=True)
 
+    @commands.hybrid_command(name="setstorageserver", description="[OWNER] Set the global storage server ID")
+    async def setstorageserver(self, ctx: commands.Context, server_id: str):
+        if not self.is_owner(ctx):
+            await ctx.send("Access denied.", ephemeral=True)
+            return
+
+        cursor = self.bot.db_conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO global_config (key, value) VALUES ('storage_server_id', ?)", (server_id,))
+        self.bot.db_conn.commit()
+
+        embed = embed_factory.create_clean_embed("💾 Storage Server Configured", f"Successfully set the storage server ID to `{server_id}`.")
+        await ctx.send(embed=embed, ephemeral=True)
+
+    @commands.hybrid_command(name="reset-meters", description="[OWNER] Reset all joke meters for the day")
+    async def reset_meters(self, ctx: commands.Context):
+        if not self.is_owner(ctx):
+            await ctx.send("Access denied.", ephemeral=True)
+            return
+
+        cursor = self.bot.db_conn.cursor()
+        cursor.execute("DELETE FROM score_overrides")
+        self.bot.db_conn.commit()
+
+        embed = embed_factory.create_clean_embed("🔄 Meters Reset", "Successfully cleared all joke meter scores for the day.")
+        await ctx.send(embed=embed, ephemeral=True)
+
     @commands.hybrid_command(name="server-insights", description="[OWNER] View deep analytics for the current server")
     async def server_insights(self, ctx: commands.Context):
         if not self.is_owner(ctx):

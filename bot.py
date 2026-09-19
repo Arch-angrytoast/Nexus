@@ -152,6 +152,38 @@ def init_db():
     ''')
     conn.commit()
 
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS global_config (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
+    conn.commit()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS iconshuffle_config (
+            guild_id TEXT PRIMARY KEY,
+            enabled INTEGER DEFAULT 0,
+            delay_seconds INTEGER DEFAULT 3600,
+            shuffle_order TEXT DEFAULT 'sequential',
+            last_shuffle TEXT DEFAULT '1970-01-01 00:00:00',
+            current_index INTEGER DEFAULT 0,
+            storage_category_id TEXT,
+            storage_channel_id TEXT
+        )
+    ''')
+    conn.commit()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS iconshuffle_icons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            channel_id TEXT,
+            message_id TEXT
+        )
+    ''')
+    conn.commit()
+
     return conn
 
 class NexusBot(commands.Bot):
@@ -187,6 +219,7 @@ class NexusBot(commands.Bot):
         await self.load_extension("cogs.misc")
         await self.load_extension("cogs.leveling")
         await self.load_extension("cogs.auditlog")
+        await self.load_extension("cogs.iconshuffle")
 
         try:
             synced = await self.tree.sync()
